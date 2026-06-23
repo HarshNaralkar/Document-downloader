@@ -861,6 +861,14 @@ app.get('/', (req, res) => {
     res.render('login.html');
 });
 
+// Redirect GET /login and GET /register to /
+app.get('/login', (req, res) => {
+    res.redirect('/');
+});
+app.get('/register', (req, res) => {
+    res.redirect('/');
+});
+
 // Login POST Handler
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
