@@ -61,8 +61,8 @@ mysql -u root -p"${MYSQL_ROOT_PASS}" -e "CREATE USER IF NOT EXISTS '${DB_USER}'@
 mysql -u root -p"${MYSQL_ROOT_PASS}" -e "GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';"
 mysql -u root -p"${MYSQL_ROOT_PASS}" -e "FLUSH PRIVILEGES;"
 
-# 8. Install Nginx
-apt-get install -y nginx
+# 8. Install Nginx & Certbot for Let's Encrypt SSL
+apt-get install -y nginx certbot python3-certbot-nginx
 systemctl start nginx
 systemctl enable nginx
 
@@ -112,7 +112,7 @@ ENVEOF
 cat > /etc/nginx/sites-available/docgen << 'NGINXEOF'
 server {
     listen 80;
-    server_name _;  # Replace _ with your domain name if you have one
+    server_name onlines.vivaninternationaljobs.com;
 
     client_max_body_size 50M;
 
@@ -134,6 +134,10 @@ NGINXEOF
 ln -sf /etc/nginx/sites-available/docgen /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
+
+# 13. Obtain Let's Encrypt SSL Certificate
+echo "Obtaining SSL certificate for onlines.vivaninternationaljobs.com..."
+certbot --nginx -d onlines.vivaninternationaljobs.com --non-interactive --agree-tos -m hn.harshnaralkar@gmail.com --redirect
 
 echo ""
 echo "===================================="

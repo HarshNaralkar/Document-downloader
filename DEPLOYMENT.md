@@ -50,11 +50,13 @@ sudo ./deploy.sh
 ```
 **What this script does automatically:**
 * Updates system libraries.
-* Installs **Node.js 20**, **PM2**, **Nginx**, and **MySQL**.
+* Installs **Node.js 20**, **PM2**, **Nginx**, **MySQL**, and **Certbot**.
 * Installs **LibreOffice** (headless conversion engine) and MS core fonts.
 * Moves `arabtype.ttf` to system font directories and updates font caches.
 * Initializes the `login` MySQL database and `docgen` user.
 * Configures **Nginx** reverse proxy to route port 80 requests to the Node app on port 5000.
+* Obtains and configures a free **Let's Encrypt SSL Certificate** for `onlines.vivaninternationaljobs.com` with automated HTTP-to-HTTPS redirect.
+
 
 ---
 
@@ -104,9 +106,10 @@ pm2 startup
 ### Step 9: Visit your Application
 Open your web browser and navigate to:
 ```
-http://YOUR_VPS_IP
+https://onlines.vivaninternationaljobs.com
 ```
-You should see the login screen. You can register, log in, persist your session, and generate PDF documents!
+You should see the login screen. You can register, log in, persist your session, and generate PDF documents securely over SSL!
+
 
 ---
 
