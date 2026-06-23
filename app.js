@@ -523,15 +523,20 @@ async function convertDocxToPdf(docxPath, outputDir) {
     const tempDir = path.join(outputDir, `_tmp_${Date.now()}_${Math.random().toString(36).slice(2)}`);
     fs.mkdirSync(tempDir, { recursive: true });
 
+    const loProfile = process.platform === 'win32' ? null : `/tmp/lo_profile_seq_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
     return new Promise((resolve, reject) => {
         let cmd;
         if (process.platform === 'win32') {
             cmd = `cmd /c ""${libreofficePath}" --headless --norestore --convert-to pdf:writer_pdf_Export --outdir "${tempDir}" "${docxPath}""`;
         } else {
-            cmd = `"${libreofficePath}" --headless --norestore --convert-to pdf:writer_pdf_Export --outdir "${tempDir}" "${docxPath}"`;
+            cmd = `"${libreofficePath}" --headless --norestore "--env:UserInstallation=file://${loProfile}" --convert-to pdf:writer_pdf_Export --outdir "${tempDir}" "${docxPath}"`;
         }
 
         exec(cmd, { timeout: 60000 }, (err, stdout, stderr) => {
+            if (loProfile) {
+                try { fs.rmSync(loProfile, { recursive: true, force: true }); } catch (_) {}
+            }
             if (err) {
                 try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (_) {}
                 console.error('[PDF conversion CLI error]:', err.message);
@@ -749,6 +754,20 @@ async function processBatchInBackground(sessionId, passportDataList, selectedDoc
 
                 try {
                     await convertDocxToPdfBatch(allConversions);
+
+                    // Check if any files missed batch conversion, and convert them sequentially as a fallback
+                    const missedConversions = allConversions.filter(c => !fs.existsSync(c.targetPdf));
+                    if (missedConversions.length > 0) {
+                        console.warn(`[PDF Conversion] ${missedConversions.length} file(s) missed batch conversion. Retrying sequentially...`);
+                        for (let i = 0; i < missedConversions.length; i++) {
+                            const c = missedConversions[i];
+                            try {
+                                await convertDocxToPdf(c.docxPath, sessionOutput);
+                            } catch (singleErr) {
+                                console.error(`[PDF Conversion] Sequential retry failed for ${c.outputName}:`, singleErr.message);
+                            }
+                        }
+                    }
 
                     BATCH_STATUS[sessionId].completed_batches = 90;
                     BATCH_STATUS[sessionId].progress_label = 'Finalising files...';
