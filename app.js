@@ -333,6 +333,56 @@ function cleanupOldOutputFolders() {
     }
 }
 
+// Automatically delete all session folders in the output folder at midnight (reduce storage full risk)
+function cleanupAllOutputFolders() {
+    try {
+        console.log('[Midnight Cleanup] Sweeping and clearing output folder...');
+        if (!fs.existsSync(OUTPUT_FOLDER)) return;
+
+        const now = Date.now();
+        const safetyBufferMs = 30 * 60 * 1000; // 30 minutes safety buffer so we don't disrupt active generation
+        const sessions = fs.readdirSync(OUTPUT_FOLDER);
+        let deletedCount = 0;
+
+        sessions.forEach(sessionDir => {
+            const fullPath = path.join(OUTPUT_FOLDER, sessionDir);
+            const stats = fs.statSync(fullPath);
+
+            if (stats.isDirectory()) {
+                const age = now - stats.mtimeMs;
+                if (age > safetyBufferMs) {
+                    fs.rmSync(fullPath, { recursive: true, force: true });
+                    deletedCount++;
+                }
+            }
+        });
+
+        console.log(`[Midnight Cleanup] Completed. Cleared ${deletedCount} session folders.`);
+    } catch (err) {
+        console.error('[Midnight Cleanup] Error during output folder sweep:', err.message);
+    }
+}
+
+// Schedule the midnight cleanup function to run at 12:00 AM every night
+function scheduleMidnightCleanup() {
+    const now = new Date();
+    const nextMidnight = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1, // Tomorrow
+        0, 0, 0, 0        // 12:00:00 AM
+    );
+    const msUntilMidnight = nextMidnight.getTime() - now.getTime();
+    
+    setTimeout(() => {
+        cleanupAllOutputFolders();
+        // Setup recurring cleanup every 24 hours starting from midnight
+        setInterval(cleanupAllOutputFolders, 24 * 60 * 60 * 1000);
+    }, msUntilMidnight);
+    
+    console.log(`[System Cleanup] Midnight cleanup scheduled. Next run in ${Math.round(msUntilMidnight / 1000 / 60)} minutes.`);
+}
+
 async function getGoogleSheetData(company) {
     const companySheet = COMPANY_GOOGLE_SHEETS[company];
     const sheet = SHEET_NAME[company];
@@ -1362,4 +1412,7 @@ app.listen(PORT, async () => {
 
     // Schedule old output folder cleanup every 24 hours
     setInterval(cleanupOldOutputFolders, 24 * 60 * 60 * 1000);
+
+    // Schedule midnight output sweep to prevent storage full risk
+    scheduleMidnightCleanup();
 });
