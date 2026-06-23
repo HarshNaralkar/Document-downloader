@@ -1,0 +1,136 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #f4f4f4;
+}
+
+/* Centered container with shadow */
+.container {
+  width: 350px;
+  margin: 100px auto;
+  padding: 20px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px #ccc;
+}
+
+/* Flash message styling */
+.flash {
+  color: red;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+/* Hide forms by default, show only active one */
+.form {
+  display: none;
+}
+.form.active {
+  display: block;
+}
+
+/* Headings */
+.form h2 {
+  text-align: center;
+  margin-bottom: 1.2rem;
+  color: #1877f2;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+/* Form styling */
+form {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  padding: 1.5rem 1rem;
+  width: 100%;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 10%), 0 8px 16px rgb(0 0 0 / 10%);
+  box-sizing: border-box;
+}
+
+/* Input fields */
+form input {
+  outline: none;
+  padding: 0.4rem 0.5rem;
+  margin-bottom: 0.8rem;
+  font-size: 0.9rem;
+  border: 1px solid #ddd;
+  border-radius: 0.3rem;
+  transition: border 0.2s;
+}
+
+form input:focus {
+  border: 1.8px solid #1877f2;
+}
+
+/* Button styling */
+form button {
+  outline: none;
+  border: none;
+  background: #1877f2;
+  padding: 0.8rem 1rem;
+  border-radius: 0.4rem;
+  font-size: 0.9rem;
+  color: #fff;
+  margin: 10px 0;
+  transition: background 0.2s;
+}
+
+form button:hover {
+  background: #0f71f1;
+  cursor: pointer;
+}
+
+/* Toggle link between forms */
+.toggle-link {
+  color: #1877f2;
+  cursor: pointer;
+  text-align: center;
+  display: block;
+  margin-top: 10px;
+  font-size: 0.95rem;
+  text-decoration: underline;
+}
+
+/* Optional: logo styling if you add a .logo div */
+.logo {
+  margin-bottom: 1rem;
+  font-size: 1.2rem;
+  text-align: center;
+  color: #1877f2;
+  font-weight: 700;
+}
+
+/* Optional: for future use, create-account button style */
+form .create-account {
+  outline: none;
+  border: none;
+  background: #06b909;
+  padding: 0.8rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  color: #fff;
+  width: 75%;
+  margin: 0 auto;
+}
+
+form .create-account:hover {
+  background: #03ad06;
+  cursor: pointer;
+}
+
+
+.forgot-link {
+    color: #1877f2;
+    display: block;
+    text-align: right;
+    margin-top: -8px;
+    margin-bottom: 10px;
+    font-size: 0.95rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+.forgot-link:hover {
+    color: #0f71f1;
+}

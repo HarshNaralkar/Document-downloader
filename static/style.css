@@ -1,0 +1,807 @@
+body {
+  background: #f5f5f5;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  margin: 0;
+  color: #23246e;
+  height: 100%;
+  min-height: 100%;
+}
+
+/* Dark Mode Styles */
+body.dark-mode {
+  background: #121212;
+  color: #eee !important;
+}
+
+body.dark-mode * {
+  color: #eee !important;
+}
+
+body.dark-mode .container,
+body.dark-mode .left-panel,
+body.dark-mode .right-panel {
+  background: #1e1e1e !important;
+  border-color: #444 !important;
+}
+
+body.dark-mode header {
+  background: #0d47a1 !important;
+}
+
+body.dark-mode input,
+body.dark-mode select,
+body.dark-mode textarea {
+  background: #333 !important;
+  color: #eee !important;
+  border-color: #555 !important;
+}
+
+body.dark-mode input::placeholder {
+  color: #bbb !important;
+}
+
+body.dark-mode button,
+body.dark-mode #generateBtn,
+body.dark-mode #searchBtn {
+  background: #0d47a1 !important;
+  border-color: #0d47a1 !important;
+}
+
+body.dark-mode button:hover,
+body.dark-mode #generateBtn:hover,
+body.dark-mode #searchBtn:hover {
+  background: #08306b !important;
+}
+
+/* Scroll View for Documents */
+.right-panel {
+  max-height: 80vh;
+  overflow-y: auto;
+  padding-right: 20px;
+}
+
+/* Existing styles below... */
+.tricolor-ribbon {
+  width: 100vw;
+  height: 7px;
+  background: linear-gradient(
+    to right,
+    /* Fade-in orange */
+    #ff9933 5%,
+    #ff9933 28%,
+    /* Fade-out orange into white */
+    #ffffff 33%,
+
+    /* White band */
+    #ffffff 33%,
+    #ffffff 66%,
+
+    /* Fade-in green from white */
+    #ffffff 66%,
+    #138808 72%,
+    #138808 95%,
+    #138808 100%
+  );
+  position: relative;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+}
+
+
+/* Dark mode fade fix for tricolor ribbon */
+body.dark-mode .tricolor-ribbon {
+  background: linear-gradient(
+    to right,
+    /* Fade-in orange */
+    #ff9933 5%,
+    #ff9933 28%,
+    /* Fade-out orange into white */
+    #ffffff 33%,
+
+    /* White band */
+    #ffffff 33%,
+    #ffffff 66%,
+
+    /* Fade-in green from white */
+    #ffffff 66%,
+    #138808 72%,
+    #138808 95%,
+    #138808 100%
+  );
+}
+
+.container {
+  width: 100vw;
+  min-height: 92vh;
+  background: #f5f5f5;
+  margin: 0;
+  padding: 0;
+}
+
+/* ... rest of your existing styles ... */
+
+header {
+  background: #282c6c;
+  color: #fff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 40px 16px 18px;
+  border-radius: 0;
+}
+
+header h1 {
+  font-size: 2.3rem;
+  margin: 0;
+  letter-spacing: 1px;
+  color: #fff;
+  font-family: 'Verdana', 'Segoe UI', sans-serif;
+  font-weight: bold;
+}
+
+#template-dropdown {
+  display: flex;
+  align-items: center; /* Vertically center children */
+  gap: 12px;           /* Space between dropdown and switch */
+  margin-top: 18px; 
+}
+
+#template-dropdown select {
+  padding: 7px 14px;
+  border-radius: 5px;
+  border: 1.5px solid #23246e;
+  font-size: 1.07rem;
+  background: #fff;
+  color: #23246e;
+  min-width: 220px;
+  font-weight: 500;
+}
+
+.logout-btn {
+  background: #e53935;
+  color: #ffffff !important;
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 6px 16px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+}
+
+.logout-btn:hover {
+  background: #c62828;
+}
+
+body.dark-mode .logout-btn {
+  background: #d32f2f !important;
+  color: #ffffff !important;
+}
+
+body.dark-mode .logout-btn:hover {
+  background: #b71c1c !important;
+}
+
+.switch {
+  position: relative;
+  width: 50px;
+  height: 28px;
+  margin-left: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #eee;
+  border-radius: 34px;
+  transition: background 0.4s;
+}
+.slider:before {
+  position: absolute;
+  content: "🌞";
+  height: 24px;
+  width: 24px;
+  left: 2px;
+  top: 2px;
+  background: transparent;
+  border-radius: 50%;
+  transition: 0.4s;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+input:checked + .slider {
+  background-color: #22274d;
+}
+input:checked + .slider:before {
+  content: "🌑";
+  transform: translateX(20px);
+}
+
+/* Fix dark backgrounds for all main sections in dark mode */
+body.dark-mode main,
+body.dark-mode .left-panel,
+body.dark-mode .right-panel {
+  background: #181a1b !important;
+}
+
+
+
+body.dark-mode fieldset {
+  background: transparent !important;
+}
+
+body.dark-mode main,
+body.dark-mode .left-panel,
+body.dark-mode .right-panel {
+  background: #181a1b !important;
+}
+body.dark-mode input,
+body.dark-mode select,
+body.dark-mode textarea {
+  background: #23272b !important;
+  color: #eee !important;
+  border-color: #444 !important;
+}
+
+body.dark-mode #trackForm,
+body.dark-mode .output-list {
+  background: transparent !important;
+}
+
+body.dark-mode legend,
+body.dark-mode label,
+body.dark-mode .main-label {
+  color: #ffffff !important;
+}
+
+body.dark-mode .inline-label {
+  color: #ffffff !important;
+}
+
+body.dark-mode h1,
+body.dark-mode h2,
+body.dark-mode h3 {
+  color: #fff !important;
+}
+
+/* Fix border colors */
+body.dark-mode .left-panel {
+  border-right: 2px solid #222 !important;
+}
+body.dark-mode .right-panel {
+  border-left: none !important;
+}
+
+/* Buttons */
+body.dark-mode button,
+body.dark-mode #generateBtn,
+body.dark-mode #searchBtn {
+  background: #1565c0 !important;
+  color: #fff !important;
+  border-color: #1565c0 !important;
+}
+body.dark-mode button:hover,
+body.dark-mode #generateBtn:hover,
+body.dark-mode #searchBtn:hover {
+  background: #08306b !important;
+}
+
+
+main {
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+  min-height: 600px;
+  background: #f5f5f5;
+}
+
+.left-panel, .right-panel {
+  flex: 1;
+  min-width: 0;
+  background: #f5f5f5;
+  padding: 40px 0 0 38px;
+  box-sizing: border-box;
+}
+
+.left-panel {
+  border-right: 2px solid #888;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+
+.right-panel {
+  padding-left: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.right-panel h2 {
+  color: #282c6c;
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin: 0 0 22px 0;
+  letter-spacing: 1px;
+}
+
+/* --- FORM LAYOUT --- */
+#trackForm {
+  width: 100%;
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+fieldset {
+  border: none;
+  margin: 0 0 10px 0;
+  padding: 0;
+  display: flex;
+  gap: 18px;
+  align-items: flex-start; /* This aligns legend to the top */
+  margin-top: 0;
+  padding-top: 0;
+}
+legend {
+  font-weight: bold;
+  color: #23246e;
+  margin-bottom: 0;
+  font-size: 1.3rem;
+  letter-spacing: 0.5px;
+  margin-right: 18px;
+  margin-bottom: 0;
+  padding-top: 0;
+  margin-top: -10px;
+}
+
+label {
+  font-size: 1.07rem;
+  font-weight: 600;
+  color: #23246e;
+  margin-bottom: 0;
+  margin-right: 12px;
+  display: inline-block;
+  vertical-align: middle;
+}
+fieldset label,
+.checkbox-group label {
+  color: #000 !important;
+}
+
+.main-label {
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: #23246e;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.form-row {
+  display: flex;
+  gap: 36px;
+  align-items: flex-end;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inline-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.inline-label {
+  font-size: 1.07rem;
+  font-weight: 600;
+  color: #23246e;
+  margin-left: 5px;
+  margin-right: 10px;
+}
+
+#usedate {
+  width: 150px;
+  font-size: 1.08rem;
+  padding: 7px 10px;
+  border-radius: 5px;
+  border: 1.5px solid #bdbdbd;
+  background: #fff;
+}
+#usedate::placeholder {
+  color: #b0b3bb;
+  font-size: 1.08rem;
+  letter-spacing: 1px;
+}
+
+#startSrno, #endSrno {
+  width: 80px;
+  font-size: 1.08rem;
+  padding: 7px 10px;
+  border-radius: 5px;
+  border: 1.5px solid #bdbdbd;
+  background: #f8f8f8;
+}
+#startSrno::placeholder, #endSrno::placeholder {
+  color: #b0b3bb;
+  font-size: 1.08rem;
+}
+
+#searchBtn {
+  width: 90px;
+  background: #282c6c;
+  color: #fff;
+  font-weight: 700;
+  border: none;
+  border-radius: 5px;
+  padding: 7px 0;
+  font-size: 1.08rem;
+  margin-left: 8px;
+  cursor: pointer;
+}
+#searchBtn:hover {
+  background: #23246e;
+}
+
+.passport-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+#passportNumber {
+  width: 240px;
+  font-size: 1.08rem;
+  padding: 7px 10px;
+  border-radius: 5px;
+  border: 1.5px solid #bdbdbd;
+  background: #fff;
+}
+#passportNumber::placeholder {
+  color: #b0b3bb;
+  font-size: 1.08rem;
+}
+
+#generateBtn {
+  width: 110px;
+  background: #282c6c;
+  color: #fff;
+  font-weight: 700;
+  border: none;
+  border-radius: 5px;
+  padding: 7px 0;
+  font-size: 1.08rem;
+  cursor: pointer;
+}
+#generateBtn:hover {
+  background: #23246e;
+}
+
+.radio-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 2px;
+}
+input[type="radio"] {
+  accent-color: #282c6c;
+  margin-right: 2px;
+  vertical-align: middle;
+  margin-left: 0;
+}
+label[for="pdfRadio"], label[for="docxRadio"] {
+  font-size: 1.04rem;
+  color: #23246e;
+  font-weight: 600;
+  margin-right: 8px;
+  margin-left: 0;
+  vertical-align: middle;
+}
+
+
+body.dark-mode input[type="text"]:hover,
+body.dark-mode input[type="number"]:hover,
+body.dark-mode input[type="date"]:hover,
+body.dark-mode select:hover,
+body.dark-mode textarea:hover {
+  border-color: #66aaff !important;
+  background: #23272b !important;
+  color: #fff !important;
+}
+button:hover,
+#trackForm button[type="button"]:hover,
+#trackForm button[type="submit"]:hover,
+.download-btn:hover,
+.download-all-btn:hover {
+  background: #1b2a57;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(36,58,119,0.12);
+  transition: background 0.18s, box-shadow 0.18s;
+}
+body.dark-mode button:hover,
+body.dark-mode #trackForm button[type="button"]:hover,
+body.dark-mode #trackForm button[type="submit"]:hover,
+body.dark-mode .download-btn:hover,
+body.dark-mode .download-all-btn:hover {
+  background: #1565c0 !important;
+  color: #fff !important;
+  box-shadow: 0 4px 14px rgba(21,101,192,0.12);
+}
+input[type="checkbox"]:hover,
+input[type="radio"]:hover {
+  outline: 2px solid #243a77;
+  cursor: pointer;
+}
+body.dark-mode input[type="checkbox"]:hover,
+body.dark-mode input[type="radio"]:hover {
+  outline: 2px solid #66aaff;
+}
+.output-item:hover {
+  background: #f2f8ff;
+  border-radius: 6px;
+  transition: background 0.18s;
+}
+body.dark-mode .output-item:hover {
+  background: #23272b !important;
+}
+
+
+input[type="text"],
+input[type="number"],
+input[type="date"] {
+  background: #fff;
+  color: #23246e;
+  border: 1.5px solid #bdbdbd;
+  border-radius: 5px;
+  font-size: 1.08rem;
+  padding: 7px 10px;
+  margin-bottom: 0;
+  box-sizing: border-box;
+}
+
+input[type="text"]::placeholder,
+input[type="number"]::placeholder,
+input[type="date"]::placeholder {
+  color: #b0b3bb;
+  font-size: 1.08rem;
+}
+input[type="text"]:hover,
+input[type="number"]:hover,
+input[type="date"]:hover,
+select:hover,
+textarea:hover {
+  border-color: #1d00b0;
+  background: #eefbf2;
+  transition: border-color 0.2s, background 0.2s;
+}
+.check, input[type="radio"] {
+  accent-color: #282c6c;
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+.output-list {
+  margin-top: 12px;
+}
+
+/* Skeleton Loading Screens */
+.skeleton-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding: 8px 0;
+}
+
+.skeleton-text {
+  width: 60%;
+  height: 20px;
+  background: linear-gradient(90deg, #e0e0e0 25%, #f2f2f2 50%, #e0e0e0 75%);
+  background-size: 200% 100%;
+  border-radius: 4px;
+  animation: shimmer 1.5s infinite linear;
+}
+
+.skeleton-button {
+  width: 100px;
+  height: 34px;
+  background: linear-gradient(90deg, #e0e0e0 25%, #f2f2f2 50%, #e0e0e0 75%);
+  background-size: 200% 100%;
+  border-radius: 7px;
+  animation: shimmer 1.5s infinite linear;
+}
+
+body.dark-mode .skeleton-text,
+body.dark-mode .skeleton-button {
+  background: linear-gradient(90deg, #2d3135 25%, #404449 50%, #2d3135 75%) !important;
+  background-size: 200% 100% !important;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.output-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 1.15rem;
+  font-weight: 500;
+  margin-bottom: 18px;
+}
+
+.output-item span {
+  font-size: 1.15rem;
+  font-weight: 500;
+  color: #222;
+}
+.download-btn {
+  background: #243a77;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 7px 22px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s;
+  box-shadow: 0 2px 7px rgba(36,58,119,0.07);
+}
+
+.download-btn:hover {
+  background: #1b2a57;
+}
+
+.download-all-btn {
+  background: #00b050;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 7px 22px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s;
+  box-shadow: 0 2px 7px rgba(0,176,80,0.07);
+}
+
+.download-all-btn:hover {
+  background: #008f3c;
+}
+body.dark-mode .right-panel h2 {
+  color: #fff !important;
+}
+
+body.dark-mode .output-item span {
+  color: #eee !important;
+}
+
+body.dark-mode .download-btn,
+body.dark-mode .download-all-btn {
+  background: #0d47a1;
+  color: #fff;
+  box-shadow: none;
+}
+
+body.dark-mode .download-btn:hover,
+body.dark-mode .download-all-btn:hover {
+  background: #08306b;
+}
+
+
+/* --- Divider between panels --- */
+.left-panel {
+  border-right: 2px solid #888;
+}
+.right-panel {
+  border-left: none;
+}
+
+/* --- Responsive for mobile --- */
+@media (max-width: 900px) {
+  main {
+    flex-direction: column;
+  }
+  .left-panel, .right-panel {
+    padding: 18px 4vw;
+    border-right: none;
+    border-bottom: 2px solid #888;
+  }
+  .right-panel {
+    padding-left: 4vw;
+  }
+  #trackForm {
+    max-width: 100%;
+  }
+  .form-row, .passport-row {
+    flex-direction: column;
+    gap: 14px;
+    align-items: flex-start;
+  }
+  .inline-group {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  #passportNumber {
+    width: 100%;
+    min-width: 0;
+  }
+  #generateBtn, #searchBtn {
+    width: 100%;
+    min-width: 0;
+    margin-left: 0;
+  }
+}
+@media (max-width: 600px) {
+  #template-dropdown {
+    width: 100%;
+    display: flex;
+    align-items: center; /* Vertically center children */
+    gap: 12px;           /* Space between dropdown and switch */
+    margin-top: 18px;
+  }
+  #template-dropdown select {
+    min-width: 0;
+    width: 80%;
+    font-size: 1rem;
+    box-sizing: border-box;
+  }
+  .switch {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;           /* Remove extra margin */
+    width: 40px;
+    height: 28px;
+    position: relative;
+    }
+  header {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 16px 8px;
+    gap: 6px;
+  }
+    fieldset {
+    flex-direction: column !important;
+    gap: 8px !important;
+    align-items: flex-start !important;
+  }
+  fieldset label {
+    width: 100%;
+    margin-right: 0;
+    margin-bottom: 0;
+  }
+}

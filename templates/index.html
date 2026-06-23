@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Documents Downloader</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=1.1">
+</head>
+<body>
+  <div class="tricolor-ribbon"></div>
+  <div class="container">
+    <header>
+      <h1>Documents Downloader</h1>
+      <div id="template-dropdown">
+        <select id="company"  required>
+          <option value="ROYAL_SKY_INTERNATIONAL">ROYAL SKY INTERNATIONAL</option>
+          <option value="VIVAN">VIVAN INTERNATIONAL</option>
+          <option value="AR">A.R. INTERNATIONAL</option>
+          <option value="SNS_GLOBLE">SNS GLOBLE</option>
+        </select>
+        <label class="switch" title="Toggle Dark Mode">
+          <input type="checkbox" id="darkModeToggle">
+          <span class="slider"></span>
+        </label>
+        <a href="/logout" class="logout-btn">Logout</a>
+      </div>
+    </header>
+    <main>
+      <div class="left-panel">
+        <form id="trackForm" autocomplete="off">
+          <fieldset>
+            <legend>Select Documents</legend>
+            <label><input type="checkbox" class="check" value="request_letter"> Request Letter</label>
+            <label><input type="checkbox" class="check" value="agreement"> Agreement</label>
+            <label><input type="checkbox" class="check" value="afi_noc"> Affidavit</label>
+            <label><input type="checkbox" class="check" value="Annexure"> Annexure</label>
+            <label><input type="checkbox" class="check" value="POA_DM"> POA & DM</label>
+          </fieldset>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="main-label" for="usedate">Filtter By Date</label>
+              <div class="inline-group">
+                <input type="date" id="usedate" placeholder="dd - mm - yyyy"
+                  onfocus="(this.type='date')"
+                  onblur="if(this.value===''){this.type='text'}">
+                <button type="button" id="searchBtn" style = " display : none;" >Search</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="main-label">Select SR.No Range</label>
+              <div class="inline-group">
+                <span class="inline-label">FROM</span>
+                <input type="number" id="startSrno" placeholder="Ex..1" min="1">
+                <span class="inline-label">TO</span>
+                <input type="number" id="endSrno" placeholder="Ex..9" min="1">
+              </div>
+            </div>
+          </div>
+          <div class="form-row passport-row">
+            <label class="main-label" for="passportNumber">Passport Number</label>
+            <input id="passportNumber" placeholder="Enter Passport Number" type="text">
+            <button type="submit" id="generateBtn">Generate</button>
+          </div>
+          <div class="radio-row">
+            <input type="radio" name="outputFormat" value="pdf" checked id="pdfRadio">
+            <label for="pdfRadio">PDF</label>
+            <input type="radio" name="outputFormat" value="docx" id="docxRadio">
+            <label for="docxRadio">DOC</label>
+          </div>
+        </form>
+      </div>
+      <div class="right-panel">
+        <h2>Generated Documents</h2>
+        <div class="output-list" id="result">
+          <!-- Output will appear here -->
+        </div>
+      </div>
+    </main>
+  </div>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
