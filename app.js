@@ -27,33 +27,35 @@ if (!fs.existsSync(OUTPUT_FOLDER)) {
 }
 
 // ── PDF Conversion Queue ──────────────────────────────────────────────────────
-// Ensures only ONE LibreOffice / Word process runs at a time across ALL users.
-// When two users submit at the same time, the second waits in queue — safe & crash-free.
+// Configurable concurrency to support multiple concurrent conversions (Option B).
+// Ensures only MAX_CONCURRENT_CONVERSIONS run at a time across ALL users.
 const conversionQueue = [];
-let isConversionRunning = false;
+let activeConversionsCount = 0;
+const MAX_CONCURRENT_CONVERSIONS = parseInt(process.env.MAX_CONCURRENT_CONVERSIONS) || 3;
 
 function enqueueConversionJob(jobFn) {
     return new Promise((resolve, reject) => {
         conversionQueue.push({ fn: jobFn, resolve, reject });
-        if (!isConversionRunning) {
-            runNextConversionJob();
-        }
+        runNextConversionJobs();
     });
 }
 
-async function runNextConversionJob() {
-    if (conversionQueue.length === 0) {
-        isConversionRunning = false;
-        return;
+function runNextConversionJobs() {
+    while (activeConversionsCount < MAX_CONCURRENT_CONVERSIONS && conversionQueue.length > 0) {
+        activeConversionsCount++;
+        const { fn, resolve, reject } = conversionQueue.shift();
+        
+        (async () => {
+            try {
+                resolve(await fn());
+            } catch (err) {
+                reject(err);
+            } finally {
+                activeConversionsCount--;
+                setImmediate(runNextConversionJobs);
+            }
+        })();
     }
-    isConversionRunning = true;
-    const { fn, resolve, reject } = conversionQueue.shift();
-    try {
-        resolve(await fn());
-    } catch (err) {
-        reject(err);
-    }
-    setImmediate(runNextConversionJob);
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -678,7 +680,8 @@ async function processBatchInBackground(sessionId, passportDataList, selectedDoc
         // Step 2: Convert all DOCX to PDF if requested
         if (outputFormat === 'pdf' && allConversions.length > 0) {
             // Show queue waiting position (multi-user: may need to wait for other users' jobs)
-            const aheadInQueue = conversionQueue.length + (isConversionRunning ? 1 : 0);
+            const isQueueFull = activeConversionsCount >= MAX_CONCURRENT_CONVERSIONS;
+            const aheadInQueue = isQueueFull ? (conversionQueue.length + 1) : 0;
             BATCH_STATUS[sessionId].completed_batches = 55;
             BATCH_STATUS[sessionId].progress_label = aheadInQueue > 0
                 ? `Queued — ${aheadInQueue} job(s) ahead, please wait...`

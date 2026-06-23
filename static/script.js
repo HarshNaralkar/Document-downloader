@@ -1,3 +1,10 @@
+// ── OPTION C CONFIGURATION ───────────────────────────────────────────────────
+// Set this to true to enable client-side PDF generation.
+// Note: Client-side conversion requires compatible libraries (like mammoth.js or pdf-lib)
+// which need to be loaded to support right-to-left layout and formatting.
+const ENABLE_CLIENT_SIDE_PDF_CONVERSION = false;
+// ─────────────────────────────────────────────────────────────────────────────
+
 let lastSessionId = null;
 let pollingInterval = null;
 let isProcessing = false;
@@ -28,6 +35,27 @@ const useDate = document.getElementById('usedate').value;
 
 // Force download helper
 function forceDownload(url, filename) {
+  if (ENABLE_CLIENT_SIDE_PDF_CONVERSION && filename.toLowerCase().endsWith('.pdf')) {
+      console.log(`[Option C] Client-side PDF generation activated for: ${filename}`);
+      // Implement browser-based PDF generation logic here
+      // For example, fetch the original docx and convert it in the user's browser.
+      const docxUrl = url.replace(/\.pdf$/, '.docx');
+      fetch(docxUrl)
+        .then(resp => resp.blob())
+        .then(docxBlob => {
+            return convertDocxToPdfClientSide(docxBlob, filename);
+        })
+        .catch(err => {
+            console.error("Client-side conversion failed, falling back to server download:", err);
+            // Fallback to normal server download if client-side fails
+            downloadBlob(url, filename);
+        });
+      return;
+  }
+  downloadBlob(url, filename);
+}
+
+function downloadBlob(url, filename) {
   fetch(url)
     .then(resp => resp.blob())
     .then(blob => {
@@ -41,6 +69,15 @@ function forceDownload(url, filename) {
         document.body.removeChild(link);
       }, 100);
     });
+}
+
+// Option C client-side conversion function (inactive for now)
+async function convertDocxToPdfClientSide(docxBlob, filename) {
+  // TODO: Add your custom client-side PDF generation library/logic here.
+  // Example: Use mammoth.js to convert DOCX to HTML, then pdf-lib or html2pdf to create a PDF.
+  // Since this is inactive, we show a warning and fall back to the server.
+  console.warn("Client-side PDF conversion is enabled but not configured. PC compatibility check needed.");
+  throw new Error("Client-side PDF engine not initialized.");
 }
 
 // Download all files as zip
