@@ -33,7 +33,7 @@ fc-cache -fv
 
 # 5. Install Arabic & Noto fonts for proper Arabic rendering
 apt-get install -y fonts-noto fonts-noto-core fonts-noto-extra \
-    fonts-arabtex fonts-kacst fonts-hosny-amiri \
+    fonts-kacst fonts-hosny-amiri \
     fonts-liberation fonts-liberation2
 
 # 6. Copy Arabic Transparent font if available locally
