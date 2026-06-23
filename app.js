@@ -530,7 +530,7 @@ async function convertDocxToPdf(docxPath, outputDir) {
         if (process.platform === 'win32') {
             cmd = `cmd /c ""${libreofficePath}" --headless --nodefault --nofirststartwizard --nolockcheck --nologo --norestore --convert-to pdf:writer_pdf_Export --outdir "${tempDir}" "${docxPath}""`;
         } else {
-            cmd = `"${libreofficePath}" --headless --nodefault --nofirststartwizard --nolockcheck --nologo --norestore "--env:UserInstallation=file://${loProfile}" --convert-to pdf:writer_pdf_Export --outdir "${tempDir}" "${docxPath}"`;
+            cmd = `"${libreofficePath}" --headless --nodefault --nofirststartwizard --nolockcheck --nologo --norestore "-env:UserInstallation=file://${loProfile}" --convert-to pdf:writer_pdf_Export --outdir "${tempDir}" "${docxPath}"`;
         }
 
         exec(cmd, { timeout: 60000 }, (err, stdout, stderr) => {
@@ -669,7 +669,7 @@ try {
     const sessionDir = path.dirname(conversions[0].docxPath);
     const loProfile = `/tmp/lo_profile_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const docxList = conversions.map(c => `"${c.docxPath}"`).join(' ');
-    const cmd = `"${libreoffice}" --headless --nodefault --nofirststartwizard --nolockcheck --nologo --norestore "--env:UserInstallation=file://${loProfile}" --convert-to pdf:writer_pdf_Export --outdir "${sessionDir}" ${docxList}`;
+    const cmd = `"${libreoffice}" --headless --nodefault --nofirststartwizard --nolockcheck --nologo --norestore "-env:UserInstallation=file://${loProfile}" --convert-to pdf:writer_pdf_Export --outdir "${sessionDir}" ${docxList}`;
 
     console.log(`[PDF Conversion] Starting batch conversion of ${conversions.length} files using LibreOffice...`);
     const startTime = Date.now();
