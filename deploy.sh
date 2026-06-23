@@ -8,10 +8,10 @@ set -e
 
 APP_DIR="/var/www/docgen"
 NODE_VERSION="20"
-MYSQL_ROOT_PASS="changeme123"   # <--- CHANGE THIS
+MYSQL_ROOT_PASS="RootPass123!"   # <--- CHANGE THIS
 DB_NAME="login"
 DB_USER="docgen"
-DB_PASS="docgen_pass123"        # <--- CHANGE THIS
+DB_PASS="DocgenPass123!"        # <--- CHANGE THIS
 
 echo "===================================="
 echo " Document Generator — VPS Setup"
@@ -92,7 +92,7 @@ cat > ${APP_DIR}/.env.example << 'ENVEOF'
 # MySQL (use the values you set in deploy.sh)
 MYSQL_HOST=localhost
 MYSQL_USER=docgen
-MYSQL_PASSWORD=docgen_pass123
+MYSQL_PASSWORD=DocgenPass123!
 MYSQL_DB=login
 
 # Session secret (generate a long random string)
@@ -105,10 +105,12 @@ MAIL_PASSWORD=your_gmail_app_password
 # LibreOffice (auto-detected on Linux, leave empty)
 # LIBREOFFICE_PATH=/usr/bin/libreoffice
 
-PORT=5000
+# Port — must be unique on this server (5100 is used to avoid conflicts)
+PORT=5100
 ENVEOF
 
-# 12. Configure Nginx reverse proxy
+# 12. Configure Nginx reverse proxy (dedicated site for this subdomain only)
+# NOTE: We do NOT remove /etc/nginx/sites-enabled/default — other apps on this server must not be disturbed.
 cat > /etc/nginx/sites-available/docgen << 'NGINXEOF'
 server {
     listen 80;
@@ -117,7 +119,7 @@ server {
     client_max_body_size 50M;
 
     location / {
-        proxy_pass http://127.0.0.1:5000;
+        proxy_pass http://127.0.0.1:5100;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -131,8 +133,8 @@ server {
 }
 NGINXEOF
 
-ln -sf /etc/nginx/sites-available/docgen /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
+# Enable this site (leave all other existing sites untouched)
+ln -sf /etc/nginx/sites-available/docgen /etc/nginx/sites-enabled/docgen
 nginx -t && systemctl reload nginx
 
 # 13. Obtain Let's Encrypt SSL Certificate

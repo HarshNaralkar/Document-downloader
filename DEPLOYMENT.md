@@ -70,7 +70,7 @@ Inside the text editor, update the following fields:
 * `MAIL_USERNAME` = Your Gmail address (e.g. `yourname@gmail.com`)
 * `MAIL_PASSWORD` = Your Gmail App Password (16-character code)
 * `SECRET_KEY` = A random secret string (e.g. `mycustomsecretkey123!`)
-* `MYSQL_PASSWORD` = Keep as `docgen_pass123` (or change if you customized it in `deploy.sh`)
+* `MYSQL_PASSWORD` = Keep as `DocgenPass123!` (or change if you customized it in `deploy.sh`)
 * `ADMIN_EMAIL` = Your admin email address for notifications
 
 *To save and exit the nano editor:*

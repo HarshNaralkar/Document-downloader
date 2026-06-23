@@ -22,7 +22,7 @@ module.exports = {
         // Environment variables for production
         env: {
             NODE_ENV: 'production',
-            PORT: 5000
+            PORT: 5100   // Unique port — avoids conflicts with other apps on the same VPS
         },
 
         // Logging
