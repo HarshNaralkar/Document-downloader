@@ -293,9 +293,9 @@ function cleanupZombieWordProcesses() {
             if (!err) console.log('[System Cleanup] Headless Word processes cleaned up.');
         });
     } else {
-        // Linux: kill any stuck headless soffice.bin instances
-        exec('pkill -f "soffice.bin" 2>/dev/null; true', () => {
-            console.log('[System Cleanup] Stale soffice.bin processes swept.');
+        // Linux: kill any stuck headless libreoffice or soffice instances and clear temp profiles
+        exec('pkill -9 -f "soffice.bin"; pkill -9 -f "soffice"; pkill -9 -f "libreoffice"; rm -rf /tmp/lo_profile_* 2>/dev/null; true', () => {
+            console.log('[System Cleanup] Stale LibreOffice processes and temp profiles swept.');
         });
     }
 }
@@ -755,16 +755,25 @@ async function processBatchInBackground(sessionId, passportDataList, selectedDoc
                 try {
                     await convertDocxToPdfBatch(allConversions);
 
-                    // Check if any files missed batch conversion, and convert them sequentially as a fallback
+                    // Check if any files missed batch conversion, and convert them sequentially with self-healing retries
                     const missedConversions = allConversions.filter(c => !fs.existsSync(c.targetPdf));
                     if (missedConversions.length > 0) {
                         console.warn(`[PDF Conversion] ${missedConversions.length} file(s) missed batch conversion. Retrying sequentially...`);
                         for (let i = 0; i < missedConversions.length; i++) {
                             const c = missedConversions[i];
-                            try {
-                                await convertDocxToPdf(c.docxPath, sessionOutput);
-                            } catch (singleErr) {
-                                console.error(`[PDF Conversion] Sequential retry failed for ${c.outputName}:`, singleErr.message);
+                            let retries = 2;
+                            while (retries > 0 && !fs.existsSync(c.targetPdf)) {
+                                try {
+                                    await convertDocxToPdf(c.docxPath, sessionOutput);
+                                } catch (singleErr) {
+                                    console.error(`[PDF Conversion] Sequential retry failed for ${c.outputName} (Retries left: ${retries-1}):`, singleErr.message);
+                                    if (retries > 1) {
+                                        console.log('[Self-Healing] Killing zombie processes and waiting 2s before retry...');
+                                        cleanupZombieWordProcesses();
+                                        await new Promise(r => setTimeout(r, 2000));
+                                    }
+                                }
+                                retries--;
                             }
                         }
                     }
@@ -789,27 +798,34 @@ async function processBatchInBackground(sessionId, passportDataList, selectedDoc
                         }
                     });
                 } catch (batchErr) {
-                    console.warn('[PDF Conversion] Batch failed, converting sequentially:', batchErr.message);
+                    console.warn('[PDF Conversion] Batch failed, healing system and converting sequentially:', batchErr.message);
+                    cleanupZombieWordProcesses();
+                    await new Promise(r => setTimeout(r, 2000));
 
-                    // Sequential fallback — each file individually
+                    // Sequential fallback — each file individually with self-healing retries
                     for (let i = 0; i < allConversions.length; i++) {
                         const c = allConversions[i];
-                        try {
-                            await convertDocxToPdf(c.docxPath, sessionOutput);
-                            if (fs.existsSync(c.targetPdf)) {
-                                try { fs.unlinkSync(c.docxPath); } catch (_) {}
-                                BATCH_STATUS[sessionId].files.push({
-                                    name: `${c.outputName}.pdf`,
-                                    url: `/download/{session_id}/${c.outputName}.pdf`
-                                });
-                            } else {
-                                BATCH_STATUS[sessionId].files.push({
-                                    name: `${c.outputName}.docx`,
-                                    url: `/download/{session_id}/${c.outputName}.docx`
-                                });
+                        let retries = 2;
+                        while (retries > 0 && !fs.existsSync(c.targetPdf)) {
+                            try {
+                                await convertDocxToPdf(c.docxPath, sessionOutput);
+                            } catch (singleErr) {
+                                console.error(`[PDF Conversion] Sequential fallback failed for ${c.outputName} (Retries left: ${retries-1}):`, singleErr.message);
+                                if (retries > 1) {
+                                    console.log('[Self-Healing] Killing zombie processes and waiting 2s before retry...');
+                                    cleanupZombieWordProcesses();
+                                    await new Promise(r => setTimeout(r, 2000));
+                                }
                             }
-                        } catch (singleErr) {
-                            console.error(`[PDF Conversion] Sequential fallback failed for ${c.outputName}:`, singleErr.message);
+                            retries--;
+                        }
+                        if (fs.existsSync(c.targetPdf)) {
+                            try { fs.unlinkSync(c.docxPath); } catch (_) {}
+                            BATCH_STATUS[sessionId].files.push({
+                                name: `${c.outputName}.pdf`,
+                                url: `/download/{session_id}/${c.outputName}.pdf`
+                            });
+                        } else {
                             BATCH_STATUS[sessionId].files.push({
                                 name: `${c.outputName}.docx`,
                                 url: `/download/{session_id}/${c.outputName}.docx`
@@ -1418,6 +1434,23 @@ app.post('/download-all', loginRequired, async (req, res) => {
 app.get('/download-all', loginRequired, async (req, res) => {
     const { session_id, file_prefix } = req.query;
     await handleDownloadAll(session_id, file_prefix, res);
+});
+
+// Manual System Refresh Endpoint
+app.post('/refresh-system', loginRequired, (req, res) => {
+    try {
+        console.log('[Manual Refresh] User triggered system refresh.');
+        // 1. Force kill all background conversions and clear temps
+        cleanupZombieWordProcesses();
+        
+        // 2. Clear output queue lock completely
+        activeConversionsCount = 0;
+        conversionQueue.length = 0;
+        
+        res.json({ success: true, message: "System refreshed successfully! All stuck processes killed and queue reset." });
+    } catch (err) {
+        res.json({ success: false, message: err.message });
+    }
 });
 
 const PORT = process.env.PORT || 5000;

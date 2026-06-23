@@ -10,6 +10,23 @@ let pollingInterval = null;
 let isProcessing = false;
 let isStatusRequestInFlight = false;
 
+document.addEventListener('DOMContentLoaded', () => {
+  const refreshBtn = document.getElementById('refreshSystemBtn');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+      if(confirm('Are you sure you want to refresh the system? This will cancel any stuck background conversions and clear the queue.')) {
+        fetch('/refresh-system', { method: 'POST' })
+          .then(r => r.json())
+          .then(d => {
+             alert(d.message);
+             window.location.reload();
+          })
+          .catch(e => alert('Error refreshing system: ' + e));
+      }
+    });
+  }
+});
+
 function stopPolling() {
   if (pollingInterval) {
     clearInterval(pollingInterval);
