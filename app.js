@@ -528,9 +528,9 @@ async function convertDocxToPdf(docxPath, outputDir) {
     return new Promise((resolve, reject) => {
         let cmd;
         if (process.platform === 'win32') {
-            cmd = `cmd /c ""${libreofficePath}" --headless --norestore --convert-to pdf:writer_pdf_Export --outdir "${tempDir}" "${docxPath}""`;
+            cmd = `cmd /c ""${libreofficePath}" --headless --nodefault --nofirststartwizard --nolockcheck --nologo --norestore --convert-to pdf:writer_pdf_Export --outdir "${tempDir}" "${docxPath}""`;
         } else {
-            cmd = `"${libreofficePath}" --headless --norestore "--env:UserInstallation=file://${loProfile}" --convert-to pdf:writer_pdf_Export --outdir "${tempDir}" "${docxPath}"`;
+            cmd = `"${libreofficePath}" --headless --nodefault --nofirststartwizard --nolockcheck --nologo --norestore "--env:UserInstallation=file://${loProfile}" --convert-to pdf:writer_pdf_Export --outdir "${tempDir}" "${docxPath}"`;
         }
 
         exec(cmd, { timeout: 60000 }, (err, stdout, stderr) => {
@@ -540,6 +540,8 @@ async function convertDocxToPdf(docxPath, outputDir) {
             if (err) {
                 try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (_) {}
                 console.error('[PDF conversion CLI error]:', err.message);
+                console.error('[PDF conversion stderr]:', stderr);
+                console.error('[PDF conversion stdout]:', stdout);
                 return reject(err);
             }
 
@@ -667,7 +669,7 @@ try {
     const sessionDir = path.dirname(conversions[0].docxPath);
     const loProfile = `/tmp/lo_profile_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const docxList = conversions.map(c => `"${c.docxPath}"`).join(' ');
-    const cmd = `"${libreoffice}" --headless --norestore "--env:UserInstallation=file://${loProfile}" --convert-to pdf:writer_pdf_Export --outdir "${sessionDir}" ${docxList}`;
+    const cmd = `"${libreoffice}" --headless --nodefault --nofirststartwizard --nolockcheck --nologo --norestore "--env:UserInstallation=file://${loProfile}" --convert-to pdf:writer_pdf_Export --outdir "${sessionDir}" ${docxList}`;
 
     console.log(`[PDF Conversion] Starting batch conversion of ${conversions.length} files using LibreOffice...`);
     const startTime = Date.now();
@@ -682,6 +684,8 @@ try {
             try { fs.rmSync(loProfile, { recursive: true, force: true }); } catch (_) {}
             if (err) {
                 console.warn('[PDF Conversion] LibreOffice batch failed:', err.message);
+                console.error('[PDF batch stderr]:', stderr);
+                console.error('[PDF batch stdout]:', stdout);
                 return reject(err);
             }
             console.log(`[PDF Conversion] LibreOffice batch completed in ${((Date.now() - startTime) / 1000).toFixed(2)}s`);
