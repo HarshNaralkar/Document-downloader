@@ -25,6 +25,22 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // Hamburger Menu Logic
+  const hamburgerBtn = document.getElementById('hamburgerBtn');
+  const hamburgerContent = document.getElementById('hamburgerContent');
+  if (hamburgerBtn && hamburgerContent) {
+    hamburgerBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hamburgerContent.classList.toggle('show');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!hamburgerBtn.contains(e.target) && !hamburgerContent.contains(e.target)) {
+        hamburgerContent.classList.remove('show');
+      }
+    });
+  }
 });
 
 function stopPolling() {

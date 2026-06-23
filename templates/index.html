@@ -22,8 +22,13 @@
           <input type="checkbox" id="darkModeToggle">
           <span class="slider"></span>
         </label>
-        <button id="refreshSystemBtn" class="logout-btn" style="background:#ff9800; border:none; margin-right: 10px; cursor:pointer;" title="Kill stuck processes and reset queue">Refresh System</button>
-        <a href="/logout" class="logout-btn">Logout</a>
+        <div class="hamburger-menu">
+          <button id="hamburgerBtn" class="hamburger-btn">☰</button>
+          <div class="hamburger-content" id="hamburgerContent">
+            <button id="refreshSystemBtn" class="logout-btn" style="background:#ff9800; border:none; cursor:pointer;" title="Kill stuck processes and reset queue">Refresh System</button>
+            <a href="/logout" class="logout-btn">Logout</a>
+          </div>
+        </div>
       </div>
     </header>
     <main>
