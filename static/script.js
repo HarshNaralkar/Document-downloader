@@ -41,6 +41,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // Wire signature modal buttons
+  initSigModalButtons();
+  // Wire folder browse button and mutual exclusion
+  initFolderBrowse();
 });
 
 function stopPolling() {
@@ -267,6 +272,337 @@ document.getElementById('searchBtn').addEventListener('click', function(event) {
   });
 });
 
+// ── SIGNATURE POPUP CONTROLLER ───────────────────────────────────────────────
+const SIG_TYPES = [
+  { value: 'employee_signature', label: 'Employee Signatures' },
+  { value: 'sponsor_signature',  label: 'Sponsor Signatures'  },
+  { value: 'stamp',              label: 'Stamps'              }
+];
+
+const sigFilesMap = {}; // { 'employee_signature': [File,...], ... }
+let sigQueue = [];
+let sigQueueIndex = 0;
+let pendingFormPayload = null;
+let currentDropFiles = []; // files collected for the current modal step
+
+let scannedFolderData = {}; // srNum -> { employee_signature: File, sponsor_signature: File, stamp: File }
+let selectedFolderName = "";
+
+function initFolderBrowse() {
+  const browseBtn = document.getElementById('sigBrowseFolderBtn');
+  const clearBtn = document.getElementById('sigClearFolderBtn');
+  const statusEl = document.getElementById('sigPathStatus');
+
+  if (browseBtn) {
+    browseBtn.addEventListener('click', handleFolderBrowse);
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', clearFolderSelection);
+  }
+
+  // Setup mutual exclusion for checkboxes
+  const checkboxes = document.querySelectorAll('.sig-check');
+  checkboxes.forEach(cb => {
+    cb.addEventListener('change', () => {
+      const anyChecked = Array.from(checkboxes).some(c => c.checked);
+      if (anyChecked) {
+        if (selectedFolderName) {
+          clearFolderSelection();
+        }
+        if (browseBtn) browseBtn.disabled = true;
+        if (statusEl) {
+          statusEl.className = 'sig-path-status warning';
+          statusEl.textContent = '⚠️ Folder browsing disabled while manual signature checkboxes are checked.';
+        }
+      } else {
+        if (browseBtn) browseBtn.disabled = false;
+        if (statusEl) {
+          statusEl.className = 'sig-path-status';
+          statusEl.textContent = '';
+        }
+      }
+    });
+  });
+}
+
+function clearFolderSelection() {
+  scannedFolderData = {};
+  selectedFolderName = "";
+  
+  const folderNameSpan = document.getElementById('sigFolderName');
+  if (folderNameSpan) folderNameSpan.textContent = "No folder selected";
+
+  const clearBtn = document.getElementById('sigClearFolderBtn');
+  if (clearBtn) clearBtn.style.display = 'none';
+
+  const statusEl = document.getElementById('sigPathStatus');
+  if (statusEl) {
+    statusEl.className = 'sig-path-status';
+    statusEl.textContent = '';
+  }
+
+  const checkboxes = document.querySelectorAll('.sig-check');
+  checkboxes.forEach(cb => {
+    cb.disabled = false;
+  });
+
+  const browseBtn = document.getElementById('sigBrowseFolderBtn');
+  if (browseBtn) browseBtn.disabled = false;
+}
+
+async function handleFolderBrowse() {
+  const statusEl = document.getElementById('sigPathStatus');
+  try {
+    if (!window.showDirectoryPicker) {
+      alert("Folder browsing is only supported on Chromium-based browsers (Chrome, Edge, Opera). Please use the manual signature checkboxes instead.");
+      return;
+    }
+
+    const dirHandle = await window.showDirectoryPicker();
+    selectedFolderName = dirHandle.name;
+    
+    const folderNameSpan = document.getElementById('sigFolderName');
+    if (folderNameSpan) folderNameSpan.textContent = selectedFolderName;
+
+    const clearBtn = document.getElementById('sigClearFolderBtn');
+    if (clearBtn) clearBtn.style.display = 'inline-block';
+    
+    const checkboxes = document.querySelectorAll('.sig-check');
+    checkboxes.forEach(cb => {
+      cb.checked = false;
+      cb.disabled = true;
+    });
+
+    statusEl.className = 'sig-path-status warning';
+    statusEl.textContent = 'Scanning folder...';
+
+    scannedFolderData = {};
+
+    let totalSrFolders = 0;
+    let employeeCount = 0;
+    let sponsorCount = 0;
+    let stampCount = 0;
+
+    for await (const entry of dirHandle.values()) {
+      if (entry.kind !== 'directory') continue;
+      
+      const match = entry.name.match(/^(\d+)/);
+      if (!match) continue;
+      
+      const srNum = parseInt(match[1], 10);
+      totalSrFolders++;
+
+      for await (const fileEntry of entry.values()) {
+        if (fileEntry.kind !== 'file') continue;
+        
+        const fname = fileEntry.name;
+        const base = fname.replace(/\.[^.]+$/, '').toLowerCase();
+        const ext = fname.split('.').pop().toLowerCase();
+        
+        if (!['png', 'jpg', 'jpeg'].includes(ext)) continue;
+        
+        let type = null;
+        if (base === 'pax') {
+          type = 'employee_signature';
+          employeeCount++;
+        } else if (base === 'spsg') {
+          type = 'sponsor_signature';
+          sponsorCount++;
+        } else if (base === 'stamp') {
+          type = 'stamp';
+          stampCount++;
+        }
+        
+        if (type) {
+          const file = await fileEntry.getFile();
+          const renamedFile = new File([file], `${srNum}.${ext}`, { type: file.type });
+          if (!scannedFolderData[srNum]) {
+            scannedFolderData[srNum] = {};
+          }
+          scannedFolderData[srNum][type] = renamedFile;
+        }
+      }
+    }
+
+    statusEl.className = 'sig-path-status success';
+    statusEl.textContent = `✅ Successfully scanned directory. Found ${totalSrFolders} SR folders (Employee: ${employeeCount}, Sponsor: ${sponsorCount}, Stamp: ${stampCount}).`;
+
+  } catch (err) {
+    console.error(err);
+    if (err.name !== 'AbortError') {
+      statusEl.className = 'sig-path-status error';
+      statusEl.textContent = `❌ Error scanning: ${err.message}`;
+      clearFolderSelection();
+    }
+  }
+}
+
+function populateSigFilesMapFromScannedFolder() {
+  Object.keys(sigFilesMap).forEach(k => delete sigFilesMap[k]);
+  
+  sigFilesMap['employee_signature'] = [];
+  sigFilesMap['sponsor_signature'] = [];
+  sigFilesMap['stamp'] = [];
+
+  const startSrno = document.getElementById('startSrno').value;
+  const endSrno = document.getElementById('endSrno').value;
+
+  if (startSrno && endSrno) {
+    const start = parseInt(startSrno, 10);
+    const end = parseInt(endSrno, 10);
+    for (let sr = start; sr <= end; sr++) {
+      if (scannedFolderData[sr]) {
+        if (scannedFolderData[sr].employee_signature) {
+          sigFilesMap['employee_signature'].push(scannedFolderData[sr].employee_signature);
+        }
+        if (scannedFolderData[sr].sponsor_signature) {
+          sigFilesMap['sponsor_signature'].push(scannedFolderData[sr].sponsor_signature);
+        }
+        if (scannedFolderData[sr].stamp) {
+          sigFilesMap['stamp'].push(scannedFolderData[sr].stamp);
+        }
+      }
+    }
+  } else {
+    Object.keys(scannedFolderData).forEach(sr => {
+      const data = scannedFolderData[sr];
+      if (data.employee_signature) sigFilesMap['employee_signature'].push(data.employee_signature);
+      if (data.sponsor_signature) sigFilesMap['sponsor_signature'].push(data.sponsor_signature);
+      if (data.stamp) sigFilesMap['stamp'].push(data.stamp);
+    });
+  }
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function renderFileList(files) {
+  const list = document.getElementById('sigFileList');
+  if (!files || files.length === 0) {
+    list.innerHTML = '';
+    return;
+  }
+  list.innerHTML = Array.from(files).map(f => `
+    <div class="sig-file-item">
+      <span class="sig-file-item-name">📄 ${f.name}</span>
+      <span class="sig-file-item-size">${formatBytes(f.size)}</span>
+    </div>
+  `).join('');
+}
+
+function openSigModal(sigType) {
+  const overlay   = document.getElementById('sigModalOverlay');
+  const title     = document.getElementById('sigModalTitle');
+  const stepBadge = document.getElementById('sigModalStep');
+  const fileInput = document.getElementById('sigFileInput');
+  const nextBtn   = document.getElementById('sigNextBtn');
+  const dropZone  = document.getElementById('sigDropZone');
+
+  const isLast = sigQueueIndex === sigQueue.length - 1;
+  title.textContent = `✍️ Upload ${sigType.label}`;
+  nextBtn.textContent = isLast ? '▶ Start Generating' : 'Next →';
+  stepBadge.textContent = `Step ${sigQueueIndex + 1} of ${sigQueue.length}`;
+
+  // Reset state for this step
+  fileInput.value = '';
+  currentDropFiles = [];
+  renderFileList([]);
+
+  // File input change
+  fileInput.onchange = () => {
+    currentDropFiles = Array.from(fileInput.files);
+    renderFileList(currentDropFiles);
+  };
+
+  // Drag and drop events
+  dropZone.ondragover = (e) => {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+  };
+  dropZone.ondragleave = (e) => {
+    if (!dropZone.contains(e.relatedTarget)) {
+      dropZone.classList.remove('dragover');
+    }
+  };
+  dropZone.ondrop = (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    const droppedFiles = Array.from(e.dataTransfer.files).filter(f =>
+      /\.(png|jpg|jpeg)$/i.test(f.name)
+    );
+    if (droppedFiles.length > 0) {
+      currentDropFiles = droppedFiles;
+      renderFileList(currentDropFiles);
+    }
+  };
+
+  // Clicking the drop zone (not just the button) also triggers file browser
+  dropZone.onclick = (e) => {
+    if (!e.target.closest('.sig-file-label')) {
+      fileInput.click();
+    }
+  };
+
+  overlay.style.display = 'flex';
+}
+
+function closeSigModal() {
+  const dropZone = document.getElementById('sigDropZone');
+  if (dropZone) {
+    dropZone.ondragover = null;
+    dropZone.ondragleave = null;
+    dropZone.ondrop = null;
+    dropZone.onclick = null;
+  }
+  document.getElementById('sigModalOverlay').style.display = 'none';
+}
+
+function proceedSigQueue() {
+  const currentType = sigQueue[sigQueueIndex];
+  // Use dragged files if any, else fall back to file input
+  const fileInput = document.getElementById('sigFileInput');
+  const files = currentDropFiles.length > 0 ? currentDropFiles : Array.from(fileInput.files);
+  sigFilesMap[currentType.value] = files;
+
+  sigQueueIndex++;
+  if (sigQueueIndex < sigQueue.length) {
+    openSigModal(sigQueue[sigQueueIndex]);
+  } else {
+    closeSigModal();
+    submitWithSignatures();
+  }
+}
+
+function submitWithSignatures() {
+  if (!pendingFormPayload) return;
+
+  const formData = new FormData();
+  Object.entries(pendingFormPayload).forEach(([k, v]) => {
+    if (Array.isArray(v)) {
+      v.forEach(item => formData.append(k + '[]', item));
+    } else {
+      formData.append(k, v);
+    }
+  });
+
+  Object.entries(sigFilesMap).forEach(([type, files]) => {
+    files.forEach(file => formData.append(`sig_${type}`, file));
+  });
+
+  submitFormData(formData, true);
+}
+
+function initSigModalButtons() {
+  document.getElementById('sigNextBtn').addEventListener('click', proceedSigQueue);
+  document.getElementById('sigCancelBtn').addEventListener('click', () => { closeSigModal(); stopPolling(); setFormBusy(false); });
+  document.getElementById('sigModalClose').addEventListener('click', () => { closeSigModal(); stopPolling(); setFormBusy(false); });
+}
+// ── END SIGNATURE POPUP CONTROLLER ───────────────────────────────────────────
+
 // Form submission handler
 document.getElementById('trackForm').addEventListener('submit', function(event) {
   event.preventDefault();
@@ -297,6 +633,12 @@ document.getElementById('trackForm').addEventListener('submit', function(event) 
     return;
   }
 
+  // Check which signature types are selected
+  const checkedSigTypes = SIG_TYPES.filter(st => {
+    const el = document.querySelector(`.sig-check[value="${st.value}"]`);
+    return el && el.checked;
+  });
+
   // Calculate dynamic skeleton count to show immediately
   let initialSkeletonCount = selectedDocs.length;
   if (startSrno && endSrno) {
@@ -319,37 +661,61 @@ document.getElementById('trackForm').addEventListener('submit', function(event) 
   isProcessing = true;
   setFormBusy(true);
 
-  fetch('/process', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      passportNumber,
-      startSrno,
-      endSrno,
-      outputFormat,
-      company,
-      selectedDocs,
-      useDate
+  // Store form payload
+  pendingFormPayload = { passportNumber, startSrno, endSrno, outputFormat, company, useDate, selectedDocs };
+
+  if (selectedFolderName) {
+    // Using browsed folder path signatures
+    populateSigFilesMapFromScannedFolder();
+    submitWithSignatures();
+  } else if (checkedSigTypes.length > 0) {
+    // Open sequential upload popup first
+    sigQueue = checkedSigTypes;
+    sigQueueIndex = 0;
+    Object.keys(sigFilesMap).forEach(k => delete sigFilesMap[k]); // clear previous
+    openSigModal(sigQueue[0]);
+  } else {
+    // No signatures — submit directly as JSON (existing behaviour)
+    submitFormData(pendingFormPayload, false);
+  }
+});
+
+// ── SHARED SUBMIT FUNCTION ────────────────────────────────────────────────────
+// Called either directly (no sigs) or after modal collection (with sigs).
+function submitFormData(payload, isMultipart) {
+  let fetchOptions;
+  if (isMultipart) {
+    // FormData with files
+    fetchOptions = { method: 'POST', body: payload };
+  } else {
+    // Plain JSON (original path — unchanged)
+    fetchOptions = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    };
+  }
+
+  fetch('/process', fetchOptions)
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        lastSessionId = data.session_id;
+        pollBatchStatus(lastSessionId);
+        pollingInterval = setInterval(() => pollBatchStatus(lastSessionId), 5000);
+      } else {
+        stopPolling();
+        setFormBusy(false);
+        document.getElementById('result').innerHTML = `<p>Error: ${data.message}</p>`;
+      }
     })
-  })
-  .then(response => response.json())
-  .then(data => {
-    if (data.success) {
-      lastSessionId = data.session_id;
-      pollBatchStatus(lastSessionId);
-      pollingInterval = setInterval(() => pollBatchStatus(lastSessionId), 5000);
-    } else {
+    .catch(err => {
       stopPolling();
       setFormBusy(false);
-      document.getElementById('result').innerHTML = `<p>Error: ${data.message}</p>`;
-    }
-  })
-  .catch(err => {
-    stopPolling();
-    setFormBusy(false);
-    document.getElementById('result').innerHTML = `<p>Error: ${err.message}</p>`;
-  });
-});
+      document.getElementById('result').innerHTML = `<p>Error: ${err.message}</p>`;
+    });
+}
+// ── END SHARED SUBMIT ─────────────────────────────────────────────────────────
 
 // (Optional) Set today's date on page load
 document.addEventListener("DOMContentLoaded", () => {

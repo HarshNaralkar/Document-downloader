@@ -15,6 +15,10 @@ const { parse } = require('csv-parse/sync');
 const PizZip = require('pizzip');
 const Docxtemplater = require('docxtemplater');
 const { exec } = require('child_process');
+const multer = require('multer');
+
+// Multer: store uploaded signature images in memory
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 dotenv.config();
 
@@ -283,7 +287,8 @@ const DOC_MAP = {
 
 // Caching layer for Google Sheet fetches
 const sheetCache = {};
-const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const CACHE_STALE_MS = 60 * 60 * 1000; // serve stale up to 1 hour while refreshing
 
 // Cleanup zombie converter processes safely (Windows: WINWORD.EXE, Linux: soffice.bin)
 function cleanupZombieWordProcesses() {
@@ -383,74 +388,73 @@ function scheduleMidnightCleanup() {
     console.log(`[System Cleanup] Midnight cleanup scheduled. Next run in ${Math.round(msUntilMidnight / 1000 / 60)} minutes.`);
 }
 
-async function getGoogleSheetData(company) {
-    const companySheet = COMPANY_GOOGLE_SHEETS[company];
-    const sheet = SHEET_NAME[company];
-    if (!companySheet || !sheet) {
-        throw new Error("Company sheet configuration not found");
-    }
-
-    const cacheKey = `${companySheet.sheet_id}_${sheet}`;
-    const now = Date.now();
-
-    if (sheetCache[cacheKey] && (now - sheetCache[cacheKey].timestamp < CACHE_TTL_MS)) {
-        console.log(`[Cache Hit] Using cached data for ${company} (${sheet})`);
-        return sheetCache[cacheKey].data;
-    }
-
-    console.log(`[Cache Miss] Fetching Google Sheet for ${company} (${sheet})...`);
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${companySheet.sheet_id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}`;
-    
+async function fetchSheetFromNetwork(csvUrl) {
     let response;
-    let retries = 3;
-    const delays = [0, 3000, 6000]; // Progressive back-off: 0s, 3s, 6s
-    while (retries > 0) {
-        const attempt = 3 - retries;
-        if (delays[attempt] > 0) {
-            await new Promise(res => setTimeout(res, delays[attempt]));
-        }
+    const delays = [0, 1000, 2000]; // Tight back-off: 0s, 1s, 2s
+    for (let attempt = 0; attempt < 3; attempt++) {
+        if (delays[attempt] > 0) await new Promise(res => setTimeout(res, delays[attempt]));
         try {
             response = await axios.get(csvUrl, {
-                timeout: 60000,
+                timeout: 25000,
                 headers: {
-                    // Send a real browser User-Agent to avoid Google blocking server-side requests
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                     'Accept-Language': 'en-US,en;q=0.5'
                 }
             });
-            break; // Success! Break out of the loop
+            return response.data;
         } catch (err) {
-            retries -= 1;
-            console.warn(`[Google Sheets Fetch] Error occurred: ${err.message}. Retries remaining: ${retries}`);
-            if (retries === 0) {
-                throw err; // Re-throw if all retries failed
-            }
+            console.warn(`[Google Sheets Fetch] Attempt ${attempt + 1} failed: ${err.message}`);
+            if (attempt === 2) throw err;
         }
     }
-    const csvText = response.data;
-    
-    // Parse CSV safely
-    const records = parse(csvText, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true
-    });
-    
-    // Clean column headers of extra spaces
-    const normalized = records.map(row => {
+}
+
+function parseSheetCsv(csvText) {
+    const records = parse(csvText, { columns: true, skip_empty_lines: true, trim: true });
+    return records.map(row => {
         const rowCopy = {};
-        for (const [key, value] of Object.entries(row)) {
-            rowCopy[key.trim()] = value;
-        }
+        for (const [key, value] of Object.entries(row)) rowCopy[key.trim()] = value;
         return rowCopy;
     });
+}
 
-    sheetCache[cacheKey] = {
-        data: normalized,
-        timestamp: now
-    };
+async function getGoogleSheetData(company) {
+    const companySheet = COMPANY_GOOGLE_SHEETS[company];
+    const sheet = SHEET_NAME[company];
+    if (!companySheet || !sheet) throw new Error('Company sheet configuration not found');
 
+    const cacheKey = `${companySheet.sheet_id}_${sheet}`;
+    const now = Date.now();
+    const cached = sheetCache[cacheKey];
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${companySheet.sheet_id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}`;
+
+    // ── STALE-WHILE-REVALIDATE ────────────────────────────────────────────────
+    // If we have ANY cached data (even stale up to 1 hour), serve it instantly
+    // and kick off a background refresh so the NEXT request is fast too.
+    if (cached) {
+        const age = now - cached.timestamp;
+        if (age < CACHE_TTL_MS) {
+            console.log(`[Cache Hit] Fresh cache for ${company}`);
+            return cached.data;
+        }
+        if (age < CACHE_STALE_MS) {
+            console.log(`[Cache Stale] Serving stale data for ${company}, refreshing in background...`);
+            // Background refresh — do NOT await, return stale instantly
+            fetchSheetFromNetwork(csvUrl).then(csv => {
+                sheetCache[cacheKey] = { data: parseSheetCsv(csv), timestamp: Date.now() };
+                console.log(`[Cache Refresh] Updated ${company} cache in background`);
+            }).catch(err => console.warn(`[Cache Refresh] Background refresh failed: ${err.message}`));
+            return cached.data;
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // No cache at all — must fetch and wait
+    console.log(`[Cache Miss] Fetching Google Sheet for ${company} (${sheet})...`);
+    const csvText = await fetchSheetFromNetwork(csvUrl);
+    const normalized = parseSheetCsv(csvText);
+    sheetCache[cacheKey] = { data: normalized, timestamp: Date.now() };
     return normalized;
 }
 
@@ -562,6 +566,254 @@ async function convertDocxToPdf(docxPath, outputDir) {
         });
     });
 }
+
+// Helper to extract width and height of PNG or JPEG from buffer without external libraries
+function getImageSize(buffer) {
+    try {
+        if (buffer.length > 8 && buffer.readUInt32BE(0) === 0x89504E47) {
+            return {
+                width: buffer.readUInt32BE(16),
+                height: buffer.readUInt32BE(20)
+            };
+        }
+        if (buffer.length > 4 && buffer.readUInt16BE(0) === 0xFFD8) {
+            let offset = 2;
+            while (offset < buffer.length) {
+                if (offset + 4 > buffer.length) break;
+                const marker = buffer.readUInt16BE(offset);
+                if (marker === 0xFFD9 || marker === 0xFFDA) {
+                    break;
+                }
+                if (marker < 0xFF00) {
+                    offset++;
+                    continue;
+                }
+                const length = buffer.readUInt16BE(offset + 2);
+                if (marker >= 0xFFC0 && marker <= 0xFFC3) {
+                    if (offset + 8 <= buffer.length) {
+                        const height = buffer.readUInt16BE(offset + 5);
+                        const width = buffer.readUInt16BE(offset + 7);
+                        return { width, height };
+                    }
+                }
+                offset += 2 + length;
+            }
+        }
+    } catch (e) {
+        console.error("Error reading image size from buffer:", e);
+    }
+    return null;
+}
+
+// Generate replacement <w:drawing> XML for a specific shapeBlock containing the placeholder
+function getReplacementImageXml(shapeBlock, rId, sigImageBuffer) {
+    let cx = 1714500;  // default ~4.8cm
+    let cy = 857250;   // default ~2.4cm
+
+    // Extract shape size to know the bounding box
+    if (shapeBlock.includes('<a:xfrm')) {
+        const extMatch = shapeBlock.match(/<a:ext\s+cx="(\d+)"\s+cy="(\d+)"/);
+        if (extMatch) {
+            cx = parseInt(extMatch[1]);
+            cy = parseInt(extMatch[2]);
+        }
+    } else {
+        // VML extraction (from style attribute of <v:rect> or <v:shape> etc.)
+        const styleMatch = shapeBlock.match(/style="([^"]*)"/);
+        if (styleMatch) {
+            const style = styleMatch[1];
+            
+            // Extract width
+            const widthMatch = style.match(/width:([\d.]+)((?:pt|in|px)?)/);
+            if (widthMatch) {
+                const val = parseFloat(widthMatch[1]);
+                const unit = widthMatch[2] || 'px';
+                if (unit === 'pt') cx = Math.round(val * 12700);
+                else if (unit === 'in') cx = Math.round(val * 914400);
+                else cx = Math.round(val * 9525);
+            }
+
+            // Extract height
+            const heightMatch = style.match(/height:([\d.]+)((?:pt|in|px)?)/);
+            if (heightMatch) {
+                const val = parseFloat(heightMatch[1]);
+                const unit = heightMatch[2] || 'px';
+                if (unit === 'pt') cy = Math.round(val * 12700);
+                else if (unit === 'in') cy = Math.round(val * 914400);
+                else cy = Math.round(val * 9525);
+            }
+        }
+    }
+
+    // --- Compute image size and scaling ---
+    let targetWidth = cx;
+    let targetHeight = cy;
+
+    const imgSize = getImageSize(sigImageBuffer);
+    if (imgSize) {
+        const imgWidthEmus = imgSize.width * 9525;
+        const imgHeightEmus = imgSize.height * 9525;
+
+        if (imgWidthEmus <= cx && imgHeightEmus <= cy) {
+            // Case 1: Image is smaller than shape -> center at original size
+            targetWidth = imgWidthEmus;
+            targetHeight = imgHeightEmus;
+        } else {
+            // Case 2: Image is larger than shape -> scale down proportionally
+            const scale = Math.min(cx / imgWidthEmus, cy / imgHeightEmus);
+            targetWidth = Math.round(imgWidthEmus * scale);
+            targetHeight = Math.round(imgHeightEmus * scale);
+        }
+    }
+
+    const docPrId = Math.floor(Math.random() * 1000000) + 1;
+    const picPrId = docPrId + 1;
+    return `<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${targetWidth}" cy="${targetHeight}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${docPrId}" name="sig"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${picPrId}" name="sig"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rId}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${targetWidth}" cy="${targetHeight}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>`;
+}
+
+// ── SIGNATURE INJECTION ─────────────────────────────────────────────────────
+// Finds Word shapes whose text bodies contain {{KEYWORD}}, extracts their
+// dimensions + rotation from the XML, removes the shapes, and inserts the
+// signature image in their place with aspect ratio scaling and centering.
+//
+// sigImageBuffer : Buffer (PNG or JPG image bytes)
+// keyword        : e.g. 'EMPLOYEE_SIGNATURE'
+// Returns        : Buffer (modified DOCX bytes)
+function injectSignatureIntoDocx(docxBuffer, keyword, sigImageBuffer) {
+    try {
+        const zip = new PizZip(docxBuffer);
+        const xmlKey = 'word/document.xml';
+        let xml = zip.file(xmlKey).asText();
+
+        // Find any shape that contains the placeholder keyword between {{ }}
+        const placeholder = `{{${keyword}}}`;
+        if (!xml.includes(placeholder)) {
+            return docxBuffer; // nothing to inject — return unchanged
+        }
+
+        // --- Save image into the docx media folder ---
+        const imgExt = 'png'; // we always write as png internally
+        const imgName = `sig_${keyword.toLowerCase()}_${Date.now()}.${imgExt}`;
+        const imgPath = `word/media/${imgName}`;
+        zip.file(imgPath, sigImageBuffer);
+
+        // --- Register image relationship ---
+        const relsKey = 'word/_rels/document.xml.rels';
+        let relsXml = zip.file(relsKey).asText();
+        const rId = `rIdSig${Date.now()}`;
+        const newRel = `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${imgName}"/>`;
+        relsXml = relsXml.replace('</Relationships>', `${newRel}</Relationships>`);
+        zip.file(relsKey, relsXml);
+
+        // --- Find and replace all shape blocks containing the placeholder ---
+        
+        function processShapeBlock(shapeBlock, placeholder, rId, sigImageBuffer) {
+            if (!shapeBlock.includes(placeholder)) return shapeBlock;
+            
+            const imgXml = getReplacementImageXml(shapeBlock, rId, sigImageBuffer);
+            let newShapeBlock = shapeBlock;
+            
+            // Make shape background and border transparent so it doesn't obstruct the image
+            newShapeBlock = newShapeBlock.replace(/<a:solidFill>[\s\S]*?<\/a:solidFill>/g, '<a:noFill/>');
+            newShapeBlock = newShapeBlock.replace(/<a:ln[^>]*>[\s\S]*?<\/a:ln>/g, '<a:ln><a:noFill/></a:ln>');
+            newShapeBlock = newShapeBlock.replace(/fillcolor="[^"]*"/g, 'filled="f"');
+            newShapeBlock = newShapeBlock.replace(/strokecolor="[^"]*"/g, 'stroked="f"');
+            
+            // Remove internal margins from the text box to allow perfect centering
+            newShapeBlock = newShapeBlock.replace(/<wps:bodyPr([^>]*)>/g, (match, p1) => {
+                let s = p1.replace(/\s+[l|t|r|b]Ins="\d+"/g, '');
+                return `<wps:bodyPr${s} lIns="0" tIns="0" rIns="0" bIns="0">`;
+            });
+            newShapeBlock = newShapeBlock.replace(/<v:textbox([^>]*)>/g, (match, p1) => {
+                let s = p1.replace(/\s+inset="[^"]*"/g, '');
+                return `<v:textbox${s} inset="0,0,0,0">`;
+            });
+
+            // Safely inject the image right after the placeholder text inside the text node
+            const tRegex = new RegExp(`(<w:t[^>]*>)([\\s\\S]*?)${placeholder}([\\s\\S]*?)(</w:t>)`);
+            newShapeBlock = newShapeBlock.replace(tRegex, `$1$2$3$4${imgXml}`);
+
+            return newShapeBlock;
+        }
+
+        // 1. First process mc:AlternateContent blocks
+        const alternateMatches = xml.match(/<mc:AlternateContent[ >][\s\S]*?<\/mc:AlternateContent>/g) || [];
+        for (const shapeBlock of alternateMatches) {
+            if (shapeBlock.includes(placeholder)) {
+                const newShapeBlock = processShapeBlock(shapeBlock, placeholder, rId, sigImageBuffer);
+                xml = xml.replace(shapeBlock, newShapeBlock);
+            }
+        }
+
+        // 2. Next process any remaining standalone w:drawing blocks
+        const drawingMatches = xml.match(/<w:drawing[ >][\s\S]*?<\/w:drawing>/g) || [];
+        for (const shapeBlock of drawingMatches) {
+            if (shapeBlock.includes(placeholder)) {
+                const newShapeBlock = processShapeBlock(shapeBlock, placeholder, rId, sigImageBuffer);
+                xml = xml.replace(shapeBlock, newShapeBlock);
+            }
+        }
+
+        // 3. Next process legacy w:pict VML blocks (often used for shape textboxes in some Word layouts)
+        const pictMatches = xml.match(/<w:pict[ >][\s\S]*?<\/w:pict>/g) || [];
+        for (const shapeBlock of pictMatches) {
+            if (shapeBlock.includes(placeholder)) {
+                const newShapeBlock = processShapeBlock(shapeBlock, placeholder, rId, sigImageBuffer);
+                xml = xml.replace(shapeBlock, newShapeBlock);
+            }
+        }
+
+        zip.file(xmlKey, xml);
+        return zip.generate({ type: 'nodebuffer' });
+    } catch (err) {
+        console.error(`[Signature Injection] Failed for keyword ${keyword}:`, err.message);
+        return docxBuffer; // return original on failure — never crash
+    }
+}
+
+function removeSignatureShapeFromDocx(docxBuffer, keyword) {
+    try {
+        const zip = new PizZip(docxBuffer);
+        const xmlKey = 'word/document.xml';
+        let xml = zip.file(xmlKey).asText();
+
+        const placeholder = `{{${keyword}}}`;
+        if (!xml.includes(placeholder)) {
+            return docxBuffer; // nothing to remove
+        }
+
+        // 1. AlternateContent
+        const alternateMatches = xml.match(/<mc:AlternateContent[ >][\s\S]*?<\/mc:AlternateContent>/g) || [];
+        for (const shapeBlock of alternateMatches) {
+            if (shapeBlock.includes(placeholder)) {
+                xml = xml.replace(shapeBlock, '');
+            }
+        }
+
+        // 2. Standalone w:drawing
+        const drawingMatches = xml.match(/<w:drawing[ >][\s\S]*?<\/w:drawing>/g) || [];
+        for (const shapeBlock of drawingMatches) {
+            if (shapeBlock.includes(placeholder)) {
+                xml = xml.replace(shapeBlock, '');
+            }
+        }
+
+        // 3. VML w:pict
+        const pictMatches = xml.match(/<w:pict[ >][\s\S]*?<\/w:pict>/g) || [];
+        for (const shapeBlock of pictMatches) {
+            if (shapeBlock.includes(placeholder)) {
+                xml = xml.replace(shapeBlock, '');
+            }
+        }
+
+        zip.file(xmlKey, xml);
+        return zip.generate({ type: 'nodebuffer' });
+    } catch (err) {
+        console.error(`[Signature Removal] Failed for keyword ${keyword}:`, err.message);
+        return docxBuffer;
+    }
+}
+// ── END SIGNATURE INJECTION ─────────────────────────────────────────────────
 
 function convertDocxToPdfWithWord(docxPath, targetPdfPath) {
     return new Promise((resolve, reject) => {
@@ -695,7 +947,7 @@ try {
 }
 
 // Background batch generator
-async function processBatchInBackground(sessionId, passportDataList, selectedDocs, company, templateFolder, sessionOutput, outputFormat) {
+async function processBatchInBackground(sessionId, passportDataList, selectedDocs, company, templateFolder, sessionOutput, outputFormat, sigImagesByType) {
     try {
         BATCH_STATUS[sessionId] = {
             status: "processing",
@@ -716,12 +968,13 @@ async function processBatchInBackground(sessionId, passportDataList, selectedDoc
             const srNo = passportData['srno'] || '0';
             
             try {
-                const { generatedDocs, missing } = await generateDocxForPassport(
+        const { generatedDocs, missing } = await generateDocxForPassport(
                     passportData,
                     selectedDocs,
                     company,
                     templateFolder,
-                    sessionOutput
+                    sessionOutput,
+                    sigImagesByType  // pass signature images
                 );
                 
                 allConversions.push(...generatedDocs);
@@ -871,7 +1124,7 @@ async function processBatchInBackground(sessionId, passportDataList, selectedDoc
 }
 
 // Single passport rows processor (now only generates DOCX)
-async function generateDocxForPassport(passportData, selectedDocs, company, templateFolder, sessionOutput) {
+async function generateDocxForPassport(passportData, selectedDocs, company, templateFolder, sessionOutput, sigImagesByType) {
     const generatedDocs = [];
     const missing = [];
     const srNo = passportData['srno'] || '0';
@@ -915,6 +1168,14 @@ async function generateDocxForPassport(passportData, selectedDocs, company, temp
             replacements['USEDATE'] = formatToDmy(replacements['USEDATE']);
         }
 
+        // Prevent docxtemplater from replacing signature placeholders with undefined
+        replacements['EMPLOYEE_SIGNATURE'] = '{{EMPLOYEE_SIGNATURE}}';
+        replacements['employee_signature'] = '{{EMPLOYEE_SIGNATURE}}';
+        replacements['SPONSOR_SIGNATURE'] = '{{SPONSOR_SIGNATURE}}';
+        replacements['sponsor_signature'] = '{{SPONSOR_SIGNATURE}}';
+        replacements['STAMP'] = '{{STAMP}}';
+        replacements['stamp'] = '{{STAMP}}';
+
         const outputDocx = path.join(sessionOutput, `${outputName}.docx`);
 
         try {
@@ -926,7 +1187,27 @@ async function generateDocxForPassport(passportData, selectedDocs, company, temp
                 linebreaks: true
             });
             doc.render(replacements);
-            const buf = doc.getZip().generate({ type: 'nodebuffer' });
+            let buf = doc.getZip().generate({ type: 'nodebuffer' });
+
+            // ── Inject signature images or remove their shapes if not provided ──────
+            const sigKeywords = ['EMPLOYEE_SIGNATURE', 'SPONSOR_SIGNATURE', 'STAMP'];
+            for (const keyword of sigKeywords) {
+                const sigType = keyword.toLowerCase(); // 'employee_signature', 'sponsor_signature', 'stamp'
+                const srNoStr = String(srNo);
+                let imgBuffer = null;
+                if (sigImagesByType && sigImagesByType[sigType]) {
+                    imgBuffer = sigImagesByType[sigType][srNoStr];
+                }
+                if (imgBuffer) {
+                    buf = injectSignatureIntoDocx(buf, keyword, imgBuffer);
+                    console.log(`[Signature] Injected ${keyword} for SR ${srNoStr}`);
+                } else {
+                    buf = removeSignatureShapeFromDocx(buf, keyword);
+                    console.log(`[Signature] Removed shape for missing ${keyword} for SR ${srNoStr}`);
+                }
+            }
+            // ── End signature injection/removal ─────────────────────────────
+
             fs.writeFileSync(outputDocx, buf);
 
             generatedDocs.push({
@@ -1260,10 +1541,28 @@ app.post('/filter-by-date', loginRequired, async (req, res) => {
     }
 });
 
-// Document processing handler
-app.post('/process', loginRequired, async (req, res) => {
+// Document processing handler — supports both JSON and multipart/form-data (with signatures)
+app.post('/process', loginRequired, upload.fields(
+    // Accept any sig_* field name (employee_signature, sponsor_signature, stamp, etc.)
+    [
+        { name: 'sig_employee_signature', maxCount: 500 },
+        { name: 'sig_sponsor_signature',  maxCount: 500 },
+        { name: 'sig_stamp',              maxCount: 500 }
+    ]
+), async (req, res) => {
     try {
-        const { passportNumber, startSrno, endSrno, outputFormat, company, selectedDocs, useDate } = req.body;
+        // Support both JSON body and multipart form body
+        const body = req.body;
+        const passportNumber = body.passportNumber;
+        const startSrno     = body.startSrno;
+        const endSrno       = body.endSrno;
+        const outputFormat  = body.outputFormat;
+        const company       = body.company;
+        const useDate       = body.useDate;
+        // selectedDocs may come as selectedDocs[] (FormData) or selectedDocs (JSON array)
+        const selectedDocs  = body['selectedDocs[]']
+            ? (Array.isArray(body['selectedDocs[]']) ? body['selectedDocs[]'] : [body['selectedDocs[]']])
+            : (Array.isArray(body.selectedDocs) ? body.selectedDocs : (body.selectedDocs ? [body.selectedDocs] : []));
 
         const TEMPLATE_FOLDER = COMPANY_TEMPLATES[company];
         if (!TEMPLATE_FOLDER || !fs.existsSync(TEMPLATE_FOLDER)) {
@@ -1275,8 +1574,7 @@ app.post('/process', loginRequired, async (req, res) => {
 
         if (startSrno && endSrno) {
             const start = parseInt(startSrno);
-            const end = parseInt(endSrno);
-
+            const end   = parseInt(endSrno);
             selectedRows = rows.filter(row => {
                 const sheetDate = formatToYmd(row['USEDATE']);
                 const srnoStr = String(row['srno'] || '').trim();
@@ -1290,18 +1588,14 @@ app.post('/process', loginRequired, async (req, res) => {
                 const rowPassport = String(row['PASSPORTNO'] || '').trim().toUpperCase();
                 return rowPassport === passportSearch;
             });
-
             if (passportRows.length === 0) {
                 return res.json({ success: false, message: "Passport number not found." });
             }
-
-            // Sort by USEDATE descending to fetch latest record
             passportRows.sort((a, b) => {
                 const dateA = new Date(formatToYmd(a['USEDATE']) || 0);
                 const dateB = new Date(formatToYmd(b['USEDATE']) || 0);
                 return dateB - dateA;
             });
-
             selectedRows = [passportRows[0]];
         } else {
             return res.json({ success: false, message: "Invalid filter parameters" });
@@ -1311,21 +1605,34 @@ app.post('/process', loginRequired, async (req, res) => {
             return res.json({ success: false, message: "No matching records found" });
         }
 
-        // Clean values for documents
         const cleanedRows = selectedRows.map(row => {
             const rowCopy = { ...row };
             rowCopy['CRNONDIDNO'] = cleanCrnondidno(rowCopy['CRNONDIDNO']);
-            if (rowCopy['Country Name']) {
-                rowCopy['Country Name'] = String(rowCopy['Country Name']).trim();
-            }
+            if (rowCopy['Country Name']) rowCopy['Country Name'] = String(rowCopy['Country Name']).trim();
             return rowCopy;
         });
 
-        const sessionId = uuidv4();
+        const sessionId     = uuidv4();
         const sessionOutput = path.join(OUTPUT_FOLDER, sessionId);
         fs.mkdirSync(sessionOutput, { recursive: true });
 
-        // Start async generation process in background
+        // ── Build sigImagesByType map from uploaded files ─────────────────────
+        // Structure: { 'employee_signature': { '1': Buffer, '2': Buffer }, ... }
+        const sigImagesByType = {};
+        if (req.files) {
+            for (const [fieldName, files] of Object.entries(req.files)) {
+                const sigType = fieldName.replace(/^sig_/, ''); // e.g. 'employee_signature'
+                sigImagesByType[sigType] = {};
+                for (const file of files) {
+                    // Extract SR number from original filename (e.g. "3.png" → "3")
+                    const srKey = path.parse(file.originalname).name;
+                    sigImagesByType[sigType][srKey] = file.buffer;
+                    console.log(`[Signature Upload] ${sigType} → SR ${srKey} (${file.size} bytes)`);
+                }
+            }
+        }
+        // ── End sig map build ─────────────────────────────────────────────────
+
         processBatchInBackground(
             sessionId,
             cleanedRows,
@@ -1333,17 +1640,21 @@ app.post('/process', loginRequired, async (req, res) => {
             company,
             TEMPLATE_FOLDER,
             sessionOutput,
-            outputFormat
+            outputFormat,
+            sigImagesByType  // NEW — empty object {} when no sigs selected
         );
 
-        res.json({
-            success: true,
-            session_id: sessionId,
-            message: "Document generation started"
-        });
+        res.json({ success: true, session_id: sessionId, message: "Document generation started" });
     } catch (err) {
         console.error(err);
-        res.json({ success: false, message: `Processing error: ${err.message}` });
+        // Give a friendly message for Google Sheets network failures
+        let userMessage = err.message;
+        if (err.code === 'ECONNABORTED' || (err.message && err.message.includes('timeout'))) {
+            userMessage = '⚠️ Cannot reach Google Sheets right now (network timeout). Please check your internet connection and try again. If this persists, the sheet URL or network firewall may be blocking the request.';
+        } else if (err.code === 'ENOTFOUND' || err.code === 'ECONNREFUSED') {
+            userMessage = '⚠️ No internet connection or DNS failure. Please check your network and try again.';
+        }
+        res.json({ success: false, message: userMessage });
     }
 });
 
@@ -1471,4 +1782,17 @@ app.listen(PORT, async () => {
 
     // Schedule midnight output sweep to prevent storage full risk
     scheduleMidnightCleanup();
+
+    // ── Pre-warm Google Sheets cache in background ────────────────────────────
+    // Fetches all company sheets silently so the first user request is instant.
+    const allCompanies = Object.keys(COMPANY_GOOGLE_SHEETS);
+    console.log(`[Cache Prewarm] Starting background cache warm for ${allCompanies.length} companies...`);
+    Promise.allSettled(allCompanies.map(c => getGoogleSheetData(c)))
+        .then(results => {
+            const ok  = results.filter(r => r.status === 'fulfilled').length;
+            const err = results.filter(r => r.status === 'rejected').length;
+            if (err > 0) console.warn(`[Cache Prewarm] Done: ${ok} OK, ${err} failed (network issue — will retry on first request)`);
+            else console.log(`[Cache Prewarm] Done: all ${ok} company sheets cached successfully ✅`);
+        });
+    // ─────────────────────────────────────────────────────────────────────────
 });

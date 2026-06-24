@@ -622,7 +622,7 @@ textarea:hover {
   background: #eefbf2;
   transition: border-color 0.2s, background 0.2s;
 }
-.check, input[type="radio"] {
+.check, .sig-check, input[type="radio"] {
   accent-color: #282c6c;
   width: 16px;
   height: 16px;
@@ -857,3 +857,390 @@ body.dark-mode .download-all-btn:hover {
     margin-bottom: 0;
   }
 }
+
+/* ── SIGNATURE FEATURE STYLES (additive – do not modify above) ──────────── */
+
+/* Modal overlay */
+.sig-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: sigFadeIn 0.2s ease;
+}
+
+@keyframes sigFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.sig-modal {
+  background: #fff;
+  border-radius: 16px;
+  width: 95%;
+  max-width: 520px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  overflow: hidden;
+  animation: sigSlideUp 0.25s ease;
+}
+
+@keyframes sigSlideUp {
+  from { transform: translateY(40px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.sig-modal-header {
+  background: linear-gradient(135deg, #282c6c, #3a4099);
+  color: #fff;
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.sig-modal-step {
+  font-size: 0.78rem;
+  font-weight: 500;
+  background: rgba(255,255,255,0.2);
+  border-radius: 20px;
+  padding: 3px 10px;
+  margin-left: auto;
+  margin-right: 10px;
+  white-space: nowrap;
+}
+
+.sig-modal-close {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.2rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.sig-modal-body {
+  padding: 18px 20px;
+}
+
+.sig-instructions {
+  background: #f5f5ff;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.sig-instructions p { margin: 0 0 6px; }
+.sig-instructions ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.sig-instructions ul li { margin-bottom: 4px; }
+.sig-instructions code {
+  background: #e8e8ff;
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 0.88rem;
+}
+
+.sig-drop-zone {
+  border: 2px dashed #a0aabf;
+  border-radius: 12px;
+  padding: 30px 20px;
+  text-align: center;
+  background: #f8f9fc;
+  transition: all 0.25s ease;
+  cursor: pointer;
+  margin-bottom: 15px;
+}
+
+.sig-drop-zone.dragover {
+  background: #e3e8ff;
+  border-color: #282c6c;
+  transform: scale(1.02);
+}
+
+.sig-drop-icon svg {
+  margin-bottom: 12px;
+  opacity: 0.8;
+  transition: transform 0.25s ease;
+}
+
+.sig-drop-zone:hover .sig-drop-icon svg {
+  transform: translateY(-4px);
+  opacity: 1;
+}
+
+.sig-drop-text {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #23246e;
+  margin: 0 0 8px;
+}
+
+.sig-drop-or {
+  font-size: 0.85rem;
+  color: #777;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.sig-file-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #282c6c;
+  color: #fff;
+  padding: 8px 22px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: background 0.15s, transform 0.1s;
+  box-shadow: 0 4px 10px rgba(40,44,108,0.2);
+}
+
+.sig-file-label:hover { 
+  background: #1a1c5a; 
+  transform: translateY(-1px);
+}
+
+.sig-file-list {
+  max-height: 140px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sig-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f1f3fa;
+  border: 1px solid #dcdfe6;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.sig-file-item-name {
+  font-weight: 600;
+  color: #282c6c;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80%;
+}
+
+.sig-file-item-size {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.sig-modal-footer {
+  padding: 12px 20px 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sig-btn {
+  padding: 9px 22px;
+  border-radius: 7px;
+  border: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.sig-btn-cancel { background: #e0e0e0; color: #333; }
+.sig-btn-cancel:hover { background: #c8c8c8; }
+
+.sig-btn-next { background: #23246e; color: #fff; }
+.sig-btn-next:hover { background: #1a1c5a; }
+
+/* Dark mode adjustments */
+
+body.dark-mode .sig-modal {
+  background: #1e1e1e !important;
+}
+
+body.dark-mode .sig-instructions {
+  background: #2a2a2a !important;
+  color: #ddd !important;
+}
+
+body.dark-mode .sig-drop-zone {
+  background: #23272b !important;
+  border-color: #555 !important;
+}
+
+body.dark-mode .sig-drop-zone.dragover {
+  background: #2c3238 !important;
+  border-color: #66aaff !important;
+}
+
+body.dark-mode .sig-drop-text { color: #eee !important; }
+body.dark-mode .sig-drop-or { color: #888 !important; }
+body.dark-mode .sig-drop-icon svg { stroke: #66aaff !important; }
+
+body.dark-mode .sig-file-item {
+  background: #2a2a2a !important;
+  border-color: #444 !important;
+  color: #ddd !important;
+}
+
+body.dark-mode .sig-file-item-name { color: #66aaff !important; }
+body.dark-mode .sig-file-item-size { color: #aaa !important; }
+
+body.dark-mode .sig-btn-cancel {
+  background: #444 !important;
+  color: #eee !important;
+}
+
+/* 📂 SIGNATURE UPLOAD PATH STYLES */
+.sig-path-group {
+  margin-top: 15px;
+}
+
+/* Developer warning icon */
+.dev-warn-icon {
+  font-size: 0.95rem;
+  cursor: help;
+  margin-left: 5px;
+  opacity: 0.75;
+  vertical-align: middle;
+  transition: opacity 0.15s;
+  position: relative;
+}
+.dev-warn-icon:hover {
+  opacity: 1;
+}
+
+.sig-path-hint {
+  font-size: 0.85rem;
+  color: #6a737d;
+  font-weight: normal;
+}
+
+#sigBrowseFolderBtn {
+  background: #282c6c;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 8px 14px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+#sigBrowseFolderBtn:hover:not(:disabled) {
+  background: #1a1c5a;
+}
+
+#sigBrowseFolderBtn:disabled {
+  background: #e0e0e0;
+  color: #a0a0a0;
+  cursor: not-allowed;
+}
+
+.sig-folder-name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  background: #f1f3fa;
+  border: 1px solid #dcdfe6;
+  border-radius: 20px;
+  color: #282c6c;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.sig-clear-btn {
+  background: #ffebe9;
+  color: #cf222e;
+  border: 1px solid rgba(207, 34, 46, 0.15);
+  padding: 6px 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  vertical-align: middle;
+}
+
+.sig-clear-btn:hover {
+  background: #ffdbda;
+}
+
+.sig-path-status {
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-top: 6px;
+  margin-bottom: 0;
+}
+
+.sig-path-status.success {
+  color: #1a7f37;
+}
+
+.sig-path-status.warning {
+  color: #9a6700;
+}
+
+.sig-path-status.error {
+  color: #cf222e;
+}
+
+/* Dark mode overrides for signature path */
+body.dark-mode .sig-path-hint {
+  color: #8b949e;
+}
+
+body.dark-mode #sigBrowseFolderBtn:disabled {
+  background: #333 !important;
+  color: #666 !important;
+}
+
+body.dark-mode .sig-folder-name {
+  background: #2a2a2a;
+  border-color: #444;
+  color: #66aaff;
+}
+
+body.dark-mode .sig-clear-btn {
+  background: #3c1e21;
+  color: #ff7b72;
+  border-color: rgba(255, 123, 114, 0.2);
+}
+
+body.dark-mode .sig-clear-btn:hover {
+  background: #4c2327;
+}
+
+body.dark-mode .sig-path-status.success {
+  color: #57ab5a;
+}
+
+body.dark-mode .sig-path-status.warning {
+  color: #db9d26;
+}
+
+body.dark-mode .sig-path-status.error {
+  color: #ff7b72;
+}
+/* ── END SIGNATURE STYLES ──────────────────────────────────────────────────── */
