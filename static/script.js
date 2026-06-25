@@ -9,6 +9,7 @@ let lastSessionId = null;
 let pollingInterval = null;
 let isProcessing = false;
 let isStatusRequestInFlight = false;
+let selectedDirHandle = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   const refreshBtn = document.getElementById('refreshSystemBtn');
@@ -329,6 +330,7 @@ function initFolderBrowse() {
 function clearFolderSelection() {
   scannedFolderData = {};
   selectedFolderName = "";
+  selectedDirHandle = null;
   
   const folderNameSpan = document.getElementById('sigFolderName');
   if (folderNameSpan) folderNameSpan.textContent = "No folder selected";
@@ -360,6 +362,7 @@ async function handleFolderBrowse() {
     }
 
     const dirHandle = await window.showDirectoryPicker();
+    selectedDirHandle = dirHandle;
     selectedFolderName = dirHandle.name;
     
     const folderNameSpan = document.getElementById('sigFolderName');
@@ -377,8 +380,23 @@ async function handleFolderBrowse() {
     statusEl.className = 'sig-path-status warning';
     statusEl.textContent = 'Scanning folder...';
 
-    scannedFolderData = {};
+    const stats = await scanDirectory(dirHandle);
 
+    statusEl.className = 'sig-path-status success';
+    statusEl.textContent = `✅ Successfully scanned directory. Found ${stats.totalSrFolders} SR folders (Employee: ${stats.employeeCount}, Sponsor: ${stats.sponsorCount}, Stamp: ${stats.stampCount}).`;
+
+  } catch (err) {
+    console.error(err);
+    if (err.name !== 'AbortError') {
+      statusEl.className = 'sig-path-status error';
+      statusEl.textContent = `❌ Error scanning: ${err.message}`;
+      clearFolderSelection();
+    }
+  }
+}
+
+async function scanDirectory(dirHandle) {
+    scannedFolderData = {};
     let totalSrFolders = 0;
     let employeeCount = 0;
     let sponsorCount = 0;
@@ -424,9 +442,8 @@ async function handleFolderBrowse() {
         }
       }
     }
-
-    statusEl.className = 'sig-path-status success';
-    statusEl.textContent = `✅ Successfully scanned directory. Found ${totalSrFolders} SR folders (Employee: ${employeeCount}, Sponsor: ${sponsorCount}, Stamp: ${stampCount}).`;
+    return { totalSrFolders, employeeCount, sponsorCount, stampCount };
+}
 
   } catch (err) {
     console.error(err);
@@ -604,7 +621,7 @@ function initSigModalButtons() {
 // ── END SIGNATURE POPUP CONTROLLER ───────────────────────────────────────────
 
 // Form submission handler
-document.getElementById('trackForm').addEventListener('submit', function(event) {
+document.getElementById('trackForm').addEventListener('submit', async function(event) {
   event.preventDefault();
 
   if (isProcessing) {
@@ -664,7 +681,22 @@ document.getElementById('trackForm').addEventListener('submit', function(event) 
   // Store form payload
   pendingFormPayload = { passportNumber, startSrno, endSrno, outputFormat, company, useDate, selectedDocs };
 
-  if (selectedFolderName) {
+  if (selectedDirHandle) {
+    // Re-scan folder right before submission to pick up the absolute latest changes!
+    try {
+        const statusEl = document.getElementById('sigPathStatus');
+        if (statusEl) {
+            statusEl.className = 'sig-path-status warning';
+            statusEl.textContent = 'Fetching latest files from folder...';
+        }
+        await scanDirectory(selectedDirHandle);
+        if (statusEl) {
+            statusEl.className = 'sig-path-status success';
+            statusEl.textContent = `✅ Latest files synced successfully.`;
+        }
+    } catch (err) {
+        console.warn("Failed to rescan directory before submit:", err);
+    }
     // Using browsed folder path signatures
     populateSigFilesMapFromScannedFolder();
     submitWithSignatures();
