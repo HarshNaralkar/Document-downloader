@@ -772,10 +772,17 @@ function injectSignatureIntoDocx(docxBuffer, keyword, sigImageBuffer) {
             let newShapeBlock = shapeBlock;
             
             // Make shape background and border transparent so it doesn't obstruct the image
-            newShapeBlock = newShapeBlock.replace(/<a:solidFill>[\s\S]*?<\/a:solidFill>/g, '<a:noFill/>');
-            newShapeBlock = newShapeBlock.replace(/<a:ln[^>]*>[\s\S]*?<\/a:ln>/g, '<a:ln><a:noFill/></a:ln>');
-            newShapeBlock = newShapeBlock.replace(/fillcolor="[^"]*"/g, 'filled="f"');
-            newShapeBlock = newShapeBlock.replace(/strokecolor="[^"]*"/g, 'stroked="f"');
+            
+            // 1. DrawingML transparency (Word 2007+)
+            newShapeBlock = newShapeBlock.replace(/<a:(solid|grad|patt|blip|no)Fill[^>]*>([\s\S]*?<\/a:\1Fill>)?/g, '');
+            newShapeBlock = newShapeBlock.replace(/<a:ln[^>]*>[\s\S]*?<\/a:ln>/g, '');
+            newShapeBlock = newShapeBlock.replace(/<\/wps:spPr>/g, '<a:noFill/><a:ln><a:noFill/></a:ln></wps:spPr>');
+            newShapeBlock = newShapeBlock.replace(/<\/pic:spPr>/g, '<a:noFill/><a:ln><a:noFill/></a:ln></pic:spPr>');
+            
+            // 2. VML transparency (Legacy/compatibility mode shapes)
+            newShapeBlock = newShapeBlock.replace(/\s+stroked="[^"]*"/ig, '');
+            newShapeBlock = newShapeBlock.replace(/\s+filled="[^"]*"/ig, '');
+            newShapeBlock = newShapeBlock.replace(/<v:(shape|rect|roundrect|oval|textbox)([^>]*)>/ig, '<v:$1$2 stroked="f" filled="f">');
             
             // Generate random insets (margins/paddings) to shift the signature slightly inside the textbox area
             // DrawingML EMUs: 914400 EMUs = 1 inch (~2.54cm). Let's shift by up to ~4mm left/right, and ~2mm top/bottom
