@@ -285,10 +285,18 @@ const DOC_MAP = {
     'POA_DM': { template: 'POA_DM.docx', name: 'POA_DM' }
 };
 
-// Caching layer for Google Sheet fetches
-const sheetCache = {};
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const CACHE_STALE_MS = 60 * 60 * 1000; // serve stale up to 1 hour while refreshing
+// Caching layer for Google Sheet fetches (Persisted to disk to survive server restarts)
+const CACHE_FILE = path.join(OUTPUT_FOLDER, 'sheet_cache.json');
+let sheetCache = {};
+try {
+    if (fs.existsSync(CACHE_FILE)) {
+        const cachedData = fs.readFileSync(CACHE_FILE, 'utf8');
+        sheetCache = JSON.parse(cachedData);
+        console.log(`[Cache] Successfully loaded persisted cache for ${Object.keys(sheetCache).length} companies from disk.`);
+    }
+} catch (err) {
+    console.warn('[Cache] Failed to load persisted cache from disk:', err.message);
+}
 
 // Cleanup zombie converter processes safely (Windows: WINWORD.EXE, Linux: soffice.bin)
 function cleanupZombieWordProcesses() {
@@ -436,6 +444,12 @@ async function getGoogleSheetData(company) {
         // Success: update cache and return fresh data
         sheetCache[cacheKey] = { data: normalized, timestamp: Date.now() };
         console.log(`[Google Sheets] Live data fetched successfully for ${company}. Cache updated.`);
+        
+        // Asynchronously persist updated cache to disk
+        fs.writeFile(CACHE_FILE, JSON.stringify(sheetCache, null, 2), 'utf8', (writeErr) => {
+            if (writeErr) console.warn('[Cache] Failed to persist cache to disk:', writeErr.message);
+        });
+        
         return normalized;
     } catch (err) {
         console.warn(`[Google Sheets] Live fetch failed for ${company}: ${err.message}`);
