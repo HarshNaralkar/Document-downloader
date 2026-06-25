@@ -286,7 +286,7 @@ const DOC_MAP = {
 };
 
 // Caching layer for Google Sheet fetches (Persisted to disk to survive server restarts)
-const CACHE_FILE = path.join(OUTPUT_FOLDER, 'sheet_cache.json');
+const CACHE_FILE = path.join(__dirname, 'sheet_cache.json');
 let sheetCache = {};
 try {
     if (fs.existsSync(CACHE_FILE)) {
@@ -398,12 +398,12 @@ function scheduleMidnightCleanup() {
 
 async function fetchSheetFromNetwork(csvUrl) {
     let response;
-    const delays = [0, 1500]; // 2 attempts with a 1.5s delay before the second attempt
-    for (let attempt = 0; attempt < 2; attempt++) {
+    const delays = [0, 1000, 2000]; // 3 attempts with progressive delay
+    for (let attempt = 0; attempt < 3; attempt++) {
         if (delays[attempt] > 0) await new Promise(res => setTimeout(res, delays[attempt]));
         try {
             response = await axios.get(csvUrl, {
-                timeout: 10000, // 10-second timeout to avoid long hangs
+                timeout: 25000, // 25-second timeout required for massive sheets
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -413,7 +413,7 @@ async function fetchSheetFromNetwork(csvUrl) {
             return response.data;
         } catch (err) {
             console.warn(`[Google Sheets Fetch] Attempt ${attempt + 1} failed: ${err.message}`);
-            if (attempt === 1) throw err;
+            if (attempt === 2) throw err;
         }
     }
 }
