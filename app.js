@@ -390,12 +390,12 @@ function scheduleMidnightCleanup() {
 
 async function fetchSheetFromNetwork(csvUrl) {
     let response;
-    const delays = [0, 1000, 2000]; // Tight back-off: 0s, 1s, 2s
-    for (let attempt = 0; attempt < 3; attempt++) {
+    const delays = [0, 1500]; // 2 attempts with a 1.5s delay before the second attempt
+    for (let attempt = 0; attempt < 2; attempt++) {
         if (delays[attempt] > 0) await new Promise(res => setTimeout(res, delays[attempt]));
         try {
             response = await axios.get(csvUrl, {
-                timeout: 25000,
+                timeout: 10000, // 10-second timeout to avoid long hangs
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -405,7 +405,7 @@ async function fetchSheetFromNetwork(csvUrl) {
             return response.data;
         } catch (err) {
             console.warn(`[Google Sheets Fetch] Attempt ${attempt + 1} failed: ${err.message}`);
-            if (attempt === 2) throw err;
+            if (attempt === 1) throw err;
         }
     }
 }
@@ -425,37 +425,31 @@ async function getGoogleSheetData(company) {
     if (!companySheet || !sheet) throw new Error('Company sheet configuration not found');
 
     const cacheKey = `${companySheet.sheet_id}_${sheet}`;
-    const now = Date.now();
     const cached = sheetCache[cacheKey];
     const csvUrl = `https://docs.google.com/spreadsheets/d/${companySheet.sheet_id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}`;
 
-    // ── STALE-WHILE-REVALIDATE ────────────────────────────────────────────────
-    // If we have ANY cached data (even stale up to 1 hour), serve it instantly
-    // and kick off a background refresh so the NEXT request is fast too.
-    if (cached) {
-        const age = now - cached.timestamp;
-        if (age < CACHE_TTL_MS) {
-            console.log(`[Cache Hit] Fresh cache for ${company}`);
+    console.log(`[Google Sheets] Fetching live data for ${company} (${sheet}) to ensure 100% accuracy...`);
+    try {
+        const csvText = await fetchSheetFromNetwork(csvUrl);
+        const normalized = parseSheetCsv(csvText);
+        
+        // Success: update cache and return fresh data
+        sheetCache[cacheKey] = { data: normalized, timestamp: Date.now() };
+        console.log(`[Google Sheets] Live data fetched successfully for ${company}. Cache updated.`);
+        return normalized;
+    } catch (err) {
+        console.warn(`[Google Sheets] Live fetch failed for ${company}: ${err.message}`);
+        
+        // Fallback: if we have any cached data, serve it so the user is not blocked
+        if (cached) {
+            const cacheAgeMin = Math.round((Date.now() - cached.timestamp) / 1000 / 60);
+            console.log(`[Google Sheets Fallback] Serving cached data (age: ${cacheAgeMin} min) as fallback.`);
             return cached.data;
         }
-        if (age < CACHE_STALE_MS) {
-            console.log(`[Cache Stale] Serving stale data for ${company}, refreshing in background...`);
-            // Background refresh — do NOT await, return stale instantly
-            fetchSheetFromNetwork(csvUrl).then(csv => {
-                sheetCache[cacheKey] = { data: parseSheetCsv(csv), timestamp: Date.now() };
-                console.log(`[Cache Refresh] Updated ${company} cache in background`);
-            }).catch(err => console.warn(`[Cache Refresh] Background refresh failed: ${err.message}`));
-            return cached.data;
-        }
+        
+        // No cache available at all: propagate the error
+        throw err;
     }
-    // ─────────────────────────────────────────────────────────────────────────
-
-    // No cache at all — must fetch and wait
-    console.log(`[Cache Miss] Fetching Google Sheet for ${company} (${sheet})...`);
-    const csvText = await fetchSheetFromNetwork(csvUrl);
-    const normalized = parseSheetCsv(csvText);
-    sheetCache[cacheKey] = { data: normalized, timestamp: Date.now() };
-    return normalized;
 }
 
 // Helpers for date formats
