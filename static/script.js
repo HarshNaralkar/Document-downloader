@@ -501,6 +501,100 @@ function renderFileList(files) {
   `).join('');
 }
 
+function loadImageForCanvas(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Could not read signature image'));
+    };
+    img.src = url;
+  });
+}
+
+function canvasToPngBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => {
+      if (blob) resolve(blob);
+      else reject(new Error('Could not convert signature image'));
+    }, 'image/png');
+  });
+}
+
+async function removeSignatureBackground(file) {
+  if (!/\.(png|jpe?g)$/i.test(file.name)) return file;
+
+  const img = await loadImageForCanvas(file);
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  canvas.width = img.naturalWidth || img.width;
+  canvas.height = img.naturalHeight || img.height;
+  ctx.drawImage(img, 0, 0);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  let minX = canvas.width;
+  let minY = canvas.height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < canvas.height; y++) {
+    for (let x = 0; x < canvas.width; x++) {
+      const i = (y * canvas.width + x) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const isLightNeutral = max > 218 && (max - min) < 42;
+      const isAlmostWhite = r > 238 && g > 238 && b > 238;
+
+      if (isLightNeutral || isAlmostWhite) {
+        data[i + 3] = 0;
+      } else if (data[i + 3] > 15) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  if (maxX < minX || maxY < minY) return file;
+  ctx.putImageData(imageData, 0, 0);
+
+  const pad = 12;
+  minX = Math.max(0, minX - pad);
+  minY = Math.max(0, minY - pad);
+  maxX = Math.min(canvas.width - 1, maxX + pad);
+  maxY = Math.min(canvas.height - 1, maxY + pad);
+
+  const cropWidth = maxX - minX + 1;
+  const cropHeight = maxY - minY + 1;
+  const cropCanvas = document.createElement('canvas');
+  cropCanvas.width = cropWidth;
+  cropCanvas.height = cropHeight;
+  cropCanvas.getContext('2d').drawImage(canvas, minX, minY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+
+  const blob = await canvasToPngBlob(cropCanvas);
+  const baseName = file.name.replace(/\.[^.]+$/, '');
+  return new File([blob], `${baseName}.png`, { type: 'image/png', lastModified: file.lastModified });
+}
+
+async function prepareSignatureFile(file, type) {
+  if (!type.includes('signature')) return file;
+  try {
+    return await removeSignatureBackground(file);
+  } catch (err) {
+    console.warn(`Signature cleanup skipped for ${file.name}:`, err);
+    return file;
+  }
+}
 function openSigModal(sigType) {
   const overlay   = document.getElementById('sigModalOverlay');
   const title     = document.getElementById('sigModalTitle');
@@ -584,7 +678,7 @@ function proceedSigQueue() {
   }
 }
 
-function submitWithSignatures() {
+async function submitWithSignatures() {
   if (!pendingFormPayload) return;
 
   const formData = new FormData();
@@ -596,9 +690,12 @@ function submitWithSignatures() {
     }
   });
 
-  Object.entries(sigFilesMap).forEach(([type, files]) => {
-    files.forEach(file => formData.append(`sig_${type}`, file));
-  });
+  for (const [type, files] of Object.entries(sigFilesMap)) {
+    for (const file of files) {
+      const preparedFile = await prepareSignatureFile(file, type);
+      formData.append(`sig_${type}`, preparedFile);
+    }
+  }
 
   submitFormData(formData, true);
 }
