@@ -697,8 +697,19 @@ function randomBetween(min, max) {
     return min + Math.random() * (max - min);
 }
 
+function randomZoneValue(min, max) {
+    if (max <= min) return min;
+    const span = max - min;
+    if (span < 6) return randomBetween(min, max);
+
+    const zone = Math.floor(Math.random() * 3); // 0 = left/top, 1 = center, 2 = right/bottom
+    const zoneStart = min + (span * zone / 3);
+    const zoneEnd = zone === 2 ? max : min + (span * (zone + 1) / 3);
+    return randomBetween(zoneStart, zoneEnd);
+}
+
 function randomizeSignaturePlaceholderPositions(xml) {
-    const signatureKeywords = ['EMPLOYEE_SIGNATURE', 'SPONSOR_SIGNATURE'];
+    const signatureKeywords = ['EMPLOYEE_SIGNATURE', 'SPONSOR_SIGNATURE', 'STAMP'];
     const pictRegex = /<w:pict[\s\S]*?<\/w:pict>/g;
     let modifiedXml = xml;
 
@@ -707,16 +718,21 @@ function randomizeSignaturePlaceholderPositions(xml) {
         const matches = [...modifiedXml.matchAll(pictRegex)];
         let shift = 0;
 
-        for (const match of matches) {
+        for (let matchIndex = 0; matchIndex < matches.length; matchIndex++) {
+            const match = matches[matchIndex];
             const pictBlock = match[0];
             if (!pictBlock.includes(placeholder)) continue;
 
-            const currentStart = match.index + shift;
-            const lookBehind = modifiedXml.slice(Math.max(0, currentStart - 7000), currentStart);
-            const boarderMatches = [...lookBehind.matchAll(/<w:pict[\s\S]*?BoarderBo?X[\s\S]*?<\/w:pict>/ig)];
-            if (boarderMatches.length === 0) continue;
+            let boarderBlock = null;
+            for (let i = matchIndex - 1; i >= 0; i--) {
+                if (/BoarderBo?X/i.test(matches[i][0])) {
+                    boarderBlock = matches[i][0];
+                    break;
+                }
+            }
+            if (!boarderBlock) continue;
 
-            const boarderBlock = boarderMatches[boarderMatches.length - 1][0];
+            const currentStart = match.index + shift;
             const boarderStyleMatch = boarderBlock.match(/<v:rect[^>]*style="([^"]*)"/i);
             const placeholderStyleMatch = pictBlock.match(/<v:rect[^>]*style="([^"]*)"/i);
             if (!boarderStyleMatch || !placeholderStyleMatch) continue;
@@ -732,8 +748,8 @@ function randomizeSignaturePlaceholderPositions(xml) {
             const maxTop = boarder['margin-top'] + boarder.height - keyBox.height - pad;
             if (maxLeft < minLeft || maxTop < minTop) continue;
 
-            const newLeft = randomBetween(minLeft, maxLeft);
-            const newTop = randomBetween(minTop, maxTop);
+            const newLeft = randomZoneValue(minLeft, maxLeft);
+            const newTop = randomZoneValue(minTop, maxTop);
             let newStyle = replaceVmlStyleValue(placeholderStyleMatch[1], 'margin-left', newLeft);
             newStyle = replaceVmlStyleValue(newStyle, 'margin-top', newTop);
             const newPictBlock = pictBlock.replace(placeholderStyleMatch[1], newStyle);
