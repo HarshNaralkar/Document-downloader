@@ -647,7 +647,7 @@ document.getElementById('trackForm').addEventListener('submit', function(event) 
   }
 
   document.getElementById('result').innerHTML = `
-    <p style="margin-bottom:6px;">Processing... 0%</p>
+    <p style="margin-bottom:6px;">Downloading latest data from Google Sheets (this may take up to 20s)...</p>
     <div style="background:#ddd;border-radius:8px;height:14px;width:100%;overflow:hidden;">
       <div style="background:#4caf50;height:100%;width:0%;transition:width 0.4s ease;border-radius:8px;"></div>
     </div>
