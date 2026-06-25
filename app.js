@@ -677,12 +677,8 @@ function getReplacementImageXml(shapeBlock, rId, sigImageBuffer) {
     const docPrId = Math.floor(Math.random() * 1000000) + 1;
     const picPrId = docPrId + 1;
 
-    // Generate a random rotation between -3.5 and +3.5 degrees to make the signature look hand-signed
-    const angleDeg = (Math.random() * 7) - 3.5;
-    let rotVal = Math.round(angleDeg * 60000);
-    if (rotVal < 0) rotVal += 21600000;
 
-    return `<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${targetWidth}" cy="${targetHeight}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${docPrId}" name="sig"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${picPrId}" name="sig"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rId}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm rot="${rotVal}"><a:off x="0" y="0"/><a:ext cx="${targetWidth}" cy="${targetHeight}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:ln><a:noFill/></a:ln></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>`;
+    return `<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${targetWidth}" cy="${targetHeight}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${docPrId}" name="sig"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${picPrId}" name="sig"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rId}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${targetWidth}" cy="${targetHeight}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:ln><a:noFill/></a:ln></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>`;
 }
 
 // Sweeps and completely deletes any shape block that contains the text "BoarderBox" or "BorderBox" (case-insensitive)
@@ -831,27 +827,14 @@ function injectSignatureIntoDocx(docxBuffer, keyword, sigImageBuffer) {
                 newShapeBlock = newShapeBlock.replace(/(<v:(shape|rect|roundrect|oval|textbox)[^>]*>)/, '$1<v:fill on="f" opacity="0"/>');
             }
             
-            // Generate random insets (margins/paddings) to shift the signature slightly inside the textbox area
-            // DrawingML EMUs: 914400 EMUs = 1 inch (~2.54cm). Let's shift by up to ~4mm left/right, and ~2mm top/bottom
-            const leftInset = Math.floor(Math.random() * 150000);
-            const topInset = Math.floor(Math.random() * 80000);
-            const rightInset = Math.floor(Math.random() * 150000);
-            const bottomInset = Math.floor(Math.random() * 80000);
-
-            // VML Insets: in inches. Let's shift by up to 0.15in left/right, and 0.08in top/bottom
-            const lIn = (Math.random() * 0.15).toFixed(3);
-            const tIn = (Math.random() * 0.08).toFixed(3);
-            const rIn = (Math.random() * 0.15).toFixed(3);
-            const bIn = (Math.random() * 0.08).toFixed(3);
-
-            // Apply our random insets to shift the signature randomly
+            // Remove internal margins from the text box so the image is placed exactly as provided.
             newShapeBlock = newShapeBlock.replace(/<wps:bodyPr([^>]*)>/g, (match, p1) => {
                 let s = p1.replace(/\s+[l|t|r|b]Ins="\d+"/g, '');
-                return `<wps:bodyPr${s} lIns="${leftInset}" tIns="${topInset}" rIns="${rightInset}" bIns="${bottomInset}">`;
+                return `<wps:bodyPr${s} lIns="0" tIns="0" rIns="0" bIns="0">`;
             });
             newShapeBlock = newShapeBlock.replace(/<v:textbox([^>]*)>/g, (match, p1) => {
                 let s = p1.replace(/\s+inset="[^"]*"/g, '');
-                return `<v:textbox${s} inset="${lIn}in,${tIn}in,${rIn}in,${bIn}in">`;
+                return `<v:textbox${s} inset="0,0,0,0">`;
             });
 
             // Safely inject the image right after the placeholder text inside the text node
