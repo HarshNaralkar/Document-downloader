@@ -773,16 +773,38 @@ function injectSignatureIntoDocx(docxBuffer, keyword, sigImageBuffer) {
             
             // Make shape background and border transparent so it doesn't obstruct the image
             
-            // 1. DrawingML transparency (Word 2007+)
+            // 1. DrawingML transparency — strip ALL fill and line elements first
             newShapeBlock = newShapeBlock.replace(/<a:(solid|grad|patt|blip|no)Fill[^>]*>([\s\S]*?<\/a:\1Fill>)?/g, '');
             newShapeBlock = newShapeBlock.replace(/<a:ln[^>]*>[\s\S]*?<\/a:ln>/g, '');
-            newShapeBlock = newShapeBlock.replace(/<\/wps:spPr>/g, '<a:noFill/><a:ln><a:noFill/></a:ln></wps:spPr>');
-            newShapeBlock = newShapeBlock.replace(/<\/pic:spPr>/g, '<a:noFill/><a:ln><a:noFill/></a:ln></pic:spPr>');
             
-            // 2. VML transparency (Legacy/compatibility mode shapes)
+            // 2. Inject noFill + noLine into EVERY spPr variant:
+            //    wps:spPr  (Word Processing shapes / textboxes)
+            //    pic:spPr  (inline pictures)
+            //    a:spPr    (DrawingML generic shapes)
+            //    spPr      (bare, no namespace prefix)
+            const noFillLine = '<a:noFill/><a:ln><a:noFill/></a:ln>';
+            newShapeBlock = newShapeBlock.replace(/<\/(wps|pic|a)?:?spPr>/g, `${noFillLine}</$1spPr>`);
+            // Fix cases where the namespace separator is empty (bare </spPr>)
+            newShapeBlock = newShapeBlock.replace(/<\/spPr>/g, `${noFillLine}</spPr>`);
+
+            // 3. VML transparency (Legacy / compatibility mode shapes)
             newShapeBlock = newShapeBlock.replace(/\s+stroked="[^"]*"/ig, '');
             newShapeBlock = newShapeBlock.replace(/\s+filled="[^"]*"/ig, '');
-            newShapeBlock = newShapeBlock.replace(/<v:(shape|rect|roundrect|oval|textbox)([^>]*)>/ig, '<v:$1$2 stroked="f" filled="f">');
+            newShapeBlock = newShapeBlock.replace(/\s+strokecolor="[^"]*"/ig, '');
+            newShapeBlock = newShapeBlock.replace(/\s+fillcolor="[^"]*"/ig, '');
+            newShapeBlock = newShapeBlock.replace(/<v:(shape|rect|roundrect|oval|textbox)([^>]*)>/ig, (m, tag, attrs) => {
+                return `<v:${tag}${attrs} stroked="f" filled="f">`;
+            });
+            // Insert an explicit <v:stroke on="f"/> to override any stroke defaults
+            newShapeBlock = newShapeBlock.replace(/<v:stroke[^>]*\/>/ig, '<v:stroke on="f"/>');
+            if (!newShapeBlock.includes('<v:stroke')) {
+                newShapeBlock = newShapeBlock.replace(/(<v:(shape|rect|roundrect|oval|textbox)[^>]*>)/, '$1<v:stroke on="f"/>');
+            }
+            // Insert an explicit <v:fill on="f" type="solid" opacity="0"/> to override fill defaults
+            newShapeBlock = newShapeBlock.replace(/<v:fill[^>]*\/>/ig, '<v:fill on="f" opacity="0"/>');
+            if (!newShapeBlock.includes('<v:fill')) {
+                newShapeBlock = newShapeBlock.replace(/(<v:(shape|rect|roundrect|oval|textbox)[^>]*>)/, '$1<v:fill on="f" opacity="0"/>');
+            }
             
             // Generate random insets (margins/paddings) to shift the signature slightly inside the textbox area
             // DrawingML EMUs: 914400 EMUs = 1 inch (~2.54cm). Let's shift by up to ~4mm left/right, and ~2mm top/bottom
