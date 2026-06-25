@@ -677,6 +677,92 @@ function getReplacementImageXml(shapeBlock, rId, sigImageBuffer, keyword, layout
 
     return `<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${targetWidth}" cy="${targetHeight}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${docPrId}" name="sig"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${picPrId}" name="sig"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rId}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${targetWidth}" cy="${targetHeight}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:ln><a:noFill/></a:ln></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>`;
 }
+function parseVmlStyle(style) {
+    const result = {};
+    for (const key of ['margin-left', 'margin-top', 'width', 'height']) {
+        const match = style.match(new RegExp(`${key}:([\\d.]+)pt`, 'i'));
+        if (match) result[key] = parseFloat(match[1]);
+    }
+    return result;
+}
+
+function replaceVmlStyleValue(style, key, value) {
+    const rounded = Number(value).toFixed(2).replace(/\.00$/, '');
+    const re = new RegExp(`${key}:[\\d.]+pt`, 'i');
+    return re.test(style) ? style.replace(re, `${key}:${rounded}pt`) : `${style};${key}:${rounded}pt`;
+}
+
+function randomBetween(min, max) {
+    if (max <= min) return min;
+    return min + Math.random() * (max - min);
+}
+
+function randomizeSignaturePlaceholderPositions(xml) {
+    const signatureKeywords = ['EMPLOYEE_SIGNATURE', 'SPONSOR_SIGNATURE'];
+    const pictRegex = /<w:pict[\s\S]*?<\/w:pict>/g;
+    let modifiedXml = xml;
+
+    for (const keyword of signatureKeywords) {
+        const placeholder = `{{${keyword}}}`;
+        const matches = [...modifiedXml.matchAll(pictRegex)];
+        let shift = 0;
+
+        for (const match of matches) {
+            const pictBlock = match[0];
+            if (!pictBlock.includes(placeholder)) continue;
+
+            const currentStart = match.index + shift;
+            const lookBehind = modifiedXml.slice(Math.max(0, currentStart - 7000), currentStart);
+            const boarderMatches = [...lookBehind.matchAll(/<w:pict[\s\S]*?BoarderBo?X[\s\S]*?<\/w:pict>/ig)];
+            if (boarderMatches.length === 0) continue;
+
+            const boarderBlock = boarderMatches[boarderMatches.length - 1][0];
+            const boarderStyleMatch = boarderBlock.match(/<v:rect[^>]*style="([^"]*)"/i);
+            const placeholderStyleMatch = pictBlock.match(/<v:rect[^>]*style="([^"]*)"/i);
+            if (!boarderStyleMatch || !placeholderStyleMatch) continue;
+
+            const boarder = parseVmlStyle(boarderStyleMatch[1]);
+            const keyBox = parseVmlStyle(placeholderStyleMatch[1]);
+            if ([boarder['margin-left'], boarder['margin-top'], boarder.width, boarder.height, keyBox.width, keyBox.height].some(v => typeof v !== 'number')) continue;
+
+            const pad = 4;
+            const minLeft = boarder['margin-left'] + pad;
+            const maxLeft = boarder['margin-left'] + boarder.width - keyBox.width - pad;
+            const minTop = boarder['margin-top'] + pad;
+            const maxTop = boarder['margin-top'] + boarder.height - keyBox.height - pad;
+            if (maxLeft < minLeft || maxTop < minTop) continue;
+
+            const newLeft = randomBetween(minLeft, maxLeft);
+            const newTop = randomBetween(minTop, maxTop);
+            let newStyle = replaceVmlStyleValue(placeholderStyleMatch[1], 'margin-left', newLeft);
+            newStyle = replaceVmlStyleValue(newStyle, 'margin-top', newTop);
+            const newPictBlock = pictBlock.replace(placeholderStyleMatch[1], newStyle);
+
+            modifiedXml = modifiedXml.slice(0, currentStart) + newPictBlock + modifiedXml.slice(currentStart + pictBlock.length);
+            shift += newPictBlock.length - pictBlock.length;
+        }
+    }
+
+    return modifiedXml;
+}
+
+function randomizeSignaturePlaceholdersInDocx(docxBuffer) {
+    try {
+        const zip = new PizZip(docxBuffer);
+        const xmlKey = 'word/document.xml';
+        const xmlFile = zip.file(xmlKey);
+        if (!xmlFile) return docxBuffer;
+        const xml = xmlFile.asText();
+        const updatedXml = randomizeSignaturePlaceholderPositions(xml);
+        if (updatedXml === xml) return docxBuffer;
+        zip.file(xmlKey, updatedXml);
+        return zip.generate({ type: 'nodebuffer' });
+    } catch (err) {
+        console.warn('[Signature Layout] Random placeholder placement skipped:', err.message);
+        return docxBuffer;
+    }
+}
+
 // Sweeps and completely deletes any shape block that contains the text "BoarderBox" or "BorderBox" (case-insensitive)
 function removeBoarderBoxes(xml) {
     const boarderBoxKeywords = ['boarderbox', 'borderbox', 'boarder box', 'border box'];
@@ -1295,6 +1381,7 @@ async function generateDocxForPassport(passportData, selectedDocs, company, temp
             });
             doc.render(replacements);
             let buf = doc.getZip().generate({ type: 'nodebuffer' });
+            buf = randomizeSignaturePlaceholdersInDocx(buf);
 
             // ── Inject signature images or remove their shapes if not provided ──────
             const sigKeywords = ['EMPLOYEE_SIGNATURE', 'SPONSOR_SIGNATURE', 'STAMP'];
