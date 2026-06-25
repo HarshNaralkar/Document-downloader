@@ -780,7 +780,7 @@ document.getElementById('trackForm').addEventListener('submit', async function(e
             statusEl.className = 'sig-path-status warning';
             statusEl.textContent = 'Fetching latest files from folder...';
         }
-        await scanDirectory(selectedDirHandle);
+        const stats = await scanDirectory(selectedDirHandle);
         if (statusEl) {
             statusEl.className = 'sig-path-status success';
             statusEl.textContent = `✅ Latest files synced successfully. ${stats.totalSrFolders} SR folders (Employee: ${stats.employeeCount}, Sponsor: ${stats.sponsorCount}, Stamp: ${stats.stampCount}).`;
