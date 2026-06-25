@@ -734,6 +734,20 @@ function removeBoarderBoxes(xml) {
 // sigImageBuffer : Buffer (PNG or JPG image bytes)
 // keyword        : e.g. 'EMPLOYEE_SIGNATURE'
 // Returns        : Buffer (modified DOCX bytes)
+// Detect the actual image format from the raw buffer magic bytes
+// This prevents JPEG bytes stored as .png from causing a broken/bordered placeholder
+function detectImageFormat(buffer) {
+    if (buffer && buffer.length >= 4) {
+        if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47)
+            return { ext: 'png', mime: 'image/png' };
+        if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF)
+            return { ext: 'jpeg', mime: 'image/jpeg' };
+        if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38)
+            return { ext: 'gif', mime: 'image/gif' };
+    }
+    return { ext: 'png', mime: 'image/png' }; // safe default
+}
+
 function injectSignatureIntoDocx(docxBuffer, keyword, sigImageBuffer) {
     try {
         const zip = new PizZip(docxBuffer);
@@ -750,10 +764,23 @@ function injectSignatureIntoDocx(docxBuffer, keyword, sigImageBuffer) {
         }
 
         // --- Save image into the docx media folder ---
-        const imgExt = 'png'; // we always write as png internally
+        const imgFormat = detectImageFormat(sigImageBuffer); // detect PNG vs JPEG vs etc.
+        const imgExt  = imgFormat.ext;
+        const imgMime = imgFormat.mime;
         const imgName = `sig_${keyword.toLowerCase()}_${Date.now()}.${imgExt}`;
         const imgPath = `word/media/${imgName}`;
         zip.file(imgPath, sigImageBuffer);
+
+        // --- Ensure the correct MIME type is registered in [Content_Types].xml ---
+        // Without this Word/LibreOffice will misidentify JPEG as PNG and render a broken box
+        try {
+            const ctKey = '[Content_Types].xml';
+            let ctXml = zip.file(ctKey).asText();
+            if (!ctXml.includes(`Extension="${imgExt}"`)) {
+                ctXml = ctXml.replace('</Types>', `<Default Extension="${imgExt}" ContentType="${imgMime}"/></Types>`);
+                zip.file(ctKey, ctXml);
+            }
+        } catch (_) {} // non-critical — continue even if content types update fails
 
         // --- Register image relationship ---
         const relsKey = 'word/_rels/document.xml.rels';
