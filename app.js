@@ -827,14 +827,21 @@ function injectSignatureIntoDocx(docxBuffer, keyword, sigImageBuffer) {
                 newShapeBlock = newShapeBlock.replace(/(<v:(shape|rect|roundrect|oval|textbox)[^>]*>)/, '$1<v:fill on="f" opacity="0"/>');
             }
             
-            // Remove internal margins from the text box so the image is placed exactly as provided.
+            // Add a small, safe placement variation for signatures only.
+            // Stamps stay fixed because their position usually needs to be exact.
+            const randomizePlacement = keyword.includes('SIGNATURE');
+            const leftOffset = randomizePlacement ? Math.floor(Math.random() * 120000) : 0;
+            const topOffset = randomizePlacement ? Math.floor(Math.random() * 80000) : 0;
+            const leftOffsetIn = (leftOffset / 914400).toFixed(3);
+            const topOffsetIn = (topOffset / 914400).toFixed(3);
+
             newShapeBlock = newShapeBlock.replace(/<wps:bodyPr([^>]*)>/g, (match, p1) => {
                 let s = p1.replace(/\s+[l|t|r|b]Ins="\d+"/g, '');
-                return `<wps:bodyPr${s} lIns="0" tIns="0" rIns="0" bIns="0">`;
+                return `<wps:bodyPr${s} lIns="${leftOffset}" tIns="${topOffset}" rIns="0" bIns="0">`;
             });
             newShapeBlock = newShapeBlock.replace(/<v:textbox([^>]*)>/g, (match, p1) => {
                 let s = p1.replace(/\s+inset="[^"]*"/g, '');
-                return `<v:textbox${s} inset="0,0,0,0">`;
+                return `<v:textbox${s} inset="${leftOffsetIn}in,${topOffsetIn}in,0,0">`;
             });
 
             // Safely inject the image right after the placeholder text inside the text node
