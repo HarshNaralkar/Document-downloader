@@ -15,14 +15,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const refreshBtn = document.getElementById('refreshSystemBtn');
   if (refreshBtn) {
     refreshBtn.addEventListener('click', () => {
-      if(confirm('Are you sure you want to refresh the system? This will cancel any stuck background conversions and clear the queue.')) {
+      if(confirm('Are you sure you want to refresh the system? This will restart the document generator and cancel active conversions.')) {
+        refreshBtn.disabled = true;
         fetch('/refresh-system', { method: 'POST' })
           .then(r => r.json())
           .then(d => {
              alert(d.message);
-             window.location.reload();
+             setTimeout(() => window.location.reload(), 12000);
           })
-          .catch(e => alert('Error refreshing system: ' + e));
+          .catch(e => {
+             refreshBtn.disabled = false;
+             alert('Error refreshing system: ' + e);
+          });
       }
     });
   }
@@ -779,7 +783,7 @@ document.getElementById('trackForm').addEventListener('submit', async function(e
         await scanDirectory(selectedDirHandle);
         if (statusEl) {
             statusEl.className = 'sig-path-status success';
-            statusEl.textContent = `✅ Latest files synced successfully.`;
+            statusEl.textContent = `✅ Latest files synced successfully. ${stats.totalSrFolders} SR folders (Employee: ${stats.employeeCount}, Sponsor: ${stats.sponsorCount}, Stamp: ${stats.stampCount}).`;
         }
     } catch (err) {
         console.warn("Failed to rescan directory before submit:", err);
