@@ -445,16 +445,6 @@ async function scanDirectory(dirHandle) {
     return { totalSrFolders, employeeCount, sponsorCount, stampCount };
 }
 
-  } catch (err) {
-    console.error(err);
-    if (err.name !== 'AbortError') {
-      statusEl.className = 'sig-path-status error';
-      statusEl.textContent = `❌ Error scanning: ${err.message}`;
-      clearFolderSelection();
-    }
-  }
-}
-
 function populateSigFilesMapFromScannedFolder() {
   Object.keys(sigFilesMap).forEach(k => delete sigFilesMap[k]);
   
