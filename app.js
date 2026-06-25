@@ -810,9 +810,7 @@ function injectSignatureIntoDocx(docxBuffer, keyword, sigImageBuffer) {
             //    a:spPr    (DrawingML generic shapes)
             //    spPr      (bare, no namespace prefix)
             const noFillLine = '<a:noFill/><a:ln><a:noFill/></a:ln>';
-            newShapeBlock = newShapeBlock.replace(/<\/(wps|pic|a)?:?spPr>/g, `${noFillLine}</$1spPr>`);
-            // Fix cases where the namespace separator is empty (bare </spPr>)
-            newShapeBlock = newShapeBlock.replace(/<\/spPr>/g, `${noFillLine}</spPr>`);
+            newShapeBlock = newShapeBlock.replace(/<\/((?:wps|pic|a):)?spPr>/g, `${noFillLine}</$1spPr>`);
 
             // 3. VML transparency (Legacy / compatibility mode shapes)
             newShapeBlock = newShapeBlock.replace(/\s+stroked="[^"]*"/ig, '');
