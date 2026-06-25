@@ -654,32 +654,26 @@ function getReplacementImageXml(shapeBlock, rId, sigImageBuffer, keyword) {
     }
 
     // --- Compute image size and scaling ---
-    let targetWidth = cx;
-    let targetHeight = cy;
+    const randomizePlacement = keyword && keyword.includes('SIGNATURE');
+    const fitWidth = randomizePlacement ? Math.round(cx * 0.72) : cx;
+    const fitHeight = randomizePlacement ? Math.round(cy * 0.42) : cy;
+    let targetWidth = fitWidth;
+    let targetHeight = fitHeight;
 
     const imgSize = getImageSize(sigImageBuffer);
     if (imgSize) {
         const imgWidthEmus = imgSize.width * 9525;
         const imgHeightEmus = imgSize.height * 9525;
-
-        if (imgWidthEmus <= cx && imgHeightEmus <= cy) {
-            // Case 1: Image is smaller than shape -> center at original size
-            targetWidth = imgWidthEmus;
-            targetHeight = imgHeightEmus;
-        } else {
-            // Case 2: Image is larger than shape -> scale down proportionally
-            const scale = Math.min(cx / imgWidthEmus, cy / imgHeightEmus);
-            targetWidth = Math.round(imgWidthEmus * scale);
-            targetHeight = Math.round(imgHeightEmus * scale);
-        }
+        const scale = Math.min(fitWidth / imgWidthEmus, fitHeight / imgHeightEmus, 1);
+        targetWidth = Math.round(imgWidthEmus * scale);
+        targetHeight = Math.round(imgHeightEmus * scale);
     }
 
     const docPrId = Math.floor(Math.random() * 1000000) + 1;
-    const randomizePlacement = keyword && keyword.includes('SIGNATURE');
-    const maxLeftOffset = randomizePlacement ? Math.max(0, Math.min(cx - targetWidth, 120000)) : 0;
-    const maxTopOffset = randomizePlacement ? Math.max(0, Math.min(cy - targetHeight, 80000)) : 0;
-    const picOffsetX = maxLeftOffset > 0 ? Math.floor(Math.random() * maxLeftOffset) : 0;
-    const picOffsetY = maxTopOffset > 0 ? Math.floor(Math.random() * maxTopOffset) : 0;
+    const maxLeftOffset = randomizePlacement ? Math.max(0, cx - targetWidth) : 0;
+    const maxTopOffset = randomizePlacement ? Math.max(0, cy - targetHeight) : 0;
+    const picOffsetX = maxLeftOffset > 0 ? Math.floor(Math.random() * (maxLeftOffset + 1)) : 0;
+    const picOffsetY = maxTopOffset > 0 ? Math.floor(Math.random() * (maxTopOffset + 1)) : 0;
     const drawingWidth = randomizePlacement ? cx : targetWidth;
     const drawingHeight = randomizePlacement ? cy : targetHeight;
 
