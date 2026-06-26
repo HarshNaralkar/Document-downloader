@@ -14,7 +14,7 @@ const axios = require('axios');
 const { parse } = require('csv-parse/sync');
 const PizZip = require('pizzip');
 const Docxtemplater = require('docxtemplater');
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const multer = require('multer');
 
 // Multer: store uploaded signature images in memory
@@ -30,12 +30,18 @@ if (!fs.existsSync(OUTPUT_FOLDER)) {
     fs.mkdirSync(OUTPUT_FOLDER, { recursive: true });
 }
 
-// ── PDF Conversion Queue ──────────────────────────────────────────────────────
-// Configurable concurrency to support multiple concurrent conversions (Option B).
-// Ensures only MAX_CONCURRENT_CONVERSIONS run at a time across ALL users.
+// PDF Conversion Queue
+// LibreOffice is forced to one conversion at a time on Linux for stability.
 const conversionQueue = [];
 let activeConversionsCount = 0;
-const MAX_CONCURRENT_CONVERSIONS = parseInt(process.env.MAX_CONCURRENT_CONVERSIONS) || 3;
+const configuredConversionLimit = parseInt(process.env.MAX_CONCURRENT_CONVERSIONS, 10) || 1;
+const MAX_CONCURRENT_CONVERSIONS = process.platform === 'win32'
+    ? Math.max(1, configuredConversionLimit)
+    : 1;
+
+if (process.platform !== 'win32' && configuredConversionLimit > 1) {
+    console.warn('[PDF Conversion] MAX_CONCURRENT_CONVERSIONS is forced to 1 on Linux for LibreOffice stability.');
+}
 
 function enqueueConversionJob(jobFn) {
     return new Promise((resolve, reject) => {
@@ -48,21 +54,46 @@ function runNextConversionJobs() {
     while (activeConversionsCount < MAX_CONCURRENT_CONVERSIONS && conversionQueue.length > 0) {
         activeConversionsCount++;
         const { fn, resolve, reject } = conversionQueue.shift();
-        
+
         (async () => {
             try {
                 resolve(await fn());
             } catch (err) {
                 reject(err);
             } finally {
-                activeConversionsCount--;
+                activeConversionsCount = Math.max(0, activeConversionsCount - 1);
                 setImmediate(runNextConversionJobs);
             }
         })();
     }
 }
-// ─────────────────────────────────────────────────────────────────────────────
 
+function rejectPendingConversionJobs(reason) {
+    while (conversionQueue.length > 0) {
+        const job = conversionQueue.shift();
+        job.reject(new Error(reason));
+    }
+}
+
+function schedulePm2Restart() {
+    if (process.platform === 'win32') {
+        console.log('[Manual Refresh] PM2 restart skipped on Windows/local environment.');
+        return;
+    }
+
+    const pm2AppName = process.env.PM2_APP_NAME || 'docgen';
+    setTimeout(() => {
+        console.log(`[Manual Refresh] Restarting PM2 app: ${pm2AppName}`);
+        execFile('pm2', ['restart', pm2AppName], { timeout: 30000 }, (err, stdout, stderr) => {
+            if (err) {
+                console.error('[Manual Refresh] PM2 restart failed:', err.message);
+                if (stderr) console.error('[Manual Refresh] PM2 stderr:', stderr);
+                return;
+            }
+            if (stdout) console.log('[Manual Refresh] PM2 stdout:', stdout.trim());
+        });
+    }, 500);
+}
 // Parse form and json bodies
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -779,6 +810,60 @@ function randomizeSignaturePlaceholdersInDocx(docxBuffer) {
     }
 }
 
+function removeTemplateImageOutlinesFromXml(xml) {
+    let modifiedXml = xml;
+
+    // LibreOffice can render a default outline when picture XML has no explicit no-line setting.
+    modifiedXml = modifiedXml.replace(/<pic:spPr\b[\s\S]*?<\/pic:spPr>/g, (spPr) => {
+        let cleaned = spPr
+            .replace(/<a:ln\b[^>]*\/>/g, '')
+            .replace(/<a:ln\b[^>]*>[\s\S]*?<\/a:ln>/g, '');
+        return cleaned.replace('</pic:spPr>', '<a:ln><a:noFill/></a:ln></pic:spPr>');
+    });
+
+    // Legacy VML pictures need the same explicit stroke-off setting for PDF conversion.
+    modifiedXml = modifiedXml.replace(/<w:pict\b[\s\S]*?<\/w:pict>/g, (pictBlock) => {
+        if (!/<v:imagedata\b|<v:fill\b[^>]*(?:src=|o:relid=|r:id=)/i.test(pictBlock)) {
+            return pictBlock;
+        }
+
+        let cleaned = pictBlock.replace(/<v:(shape|rect|roundrect)\b([^>]*)>/ig, (match, tag, attrs) => {
+            const nextAttrs = attrs
+                .replace(/\s+stroked="[^"]*"/ig, '')
+                .replace(/\s+strokecolor="[^"]*"/ig, '');
+            return `<v:${tag}${nextAttrs} stroked="f">`;
+        });
+        cleaned = cleaned.replace(/<v:stroke\b[^>]*\/>/ig, '<v:stroke on="f"/>');
+        if (!/<v:stroke\b/i.test(cleaned)) {
+            cleaned = cleaned.replace(/(<v:(shape|rect|roundrect)\b[^>]*>)/i, '$1<v:stroke on="f"/>');
+        }
+        return cleaned;
+    });
+
+    return modifiedXml;
+}
+
+function normalizeExistingImageBordersInDocx(docxBuffer) {
+    try {
+        const zip = new PizZip(docxBuffer);
+        const xmlFiles = zip.file(/^word\/(document|header\d+|footer\d+)\.xml$/);
+        let changed = false;
+
+        for (const xmlFile of xmlFiles) {
+            const xml = xmlFile.asText();
+            const updatedXml = removeTemplateImageOutlinesFromXml(xml);
+            if (updatedXml !== xml) {
+                zip.file(xmlFile.name, updatedXml);
+                changed = true;
+            }
+        }
+
+        return changed ? zip.generate({ type: 'nodebuffer' }) : docxBuffer;
+    } catch (err) {
+        console.warn('[Template Images] Image border cleanup skipped:', err.message);
+        return docxBuffer;
+    }
+}
 // Sweeps and completely deletes any shape block that contains the text "BoarderBox" or "BorderBox" (case-insensitive)
 function removeBoarderBoxes(xml) {
     const boarderBoxKeywords = ['boarderbox', 'borderbox', 'boarder box', 'border box'];
@@ -1418,6 +1503,8 @@ async function generateDocxForPassport(passportData, selectedDocs, company, temp
             }
             // ── End signature injection/removal ─────────────────────────────
 
+            buf = normalizeExistingImageBordersInDocx(buf);
+
             fs.writeFileSync(outputDocx, buf);
 
             generatedDocs.push({
@@ -1965,19 +2052,20 @@ app.get('/download-all', loginRequired, async (req, res) => {
 app.post('/refresh-system', loginRequired, (req, res) => {
     try {
         console.log('[Manual Refresh] User triggered system refresh.');
-        // 1. Force kill all background conversions and clear temps
+
         cleanupZombieWordProcesses();
-        
-        // 2. Clear output queue lock completely
-        activeConversionsCount = 0;
-        conversionQueue.length = 0;
-        
-        res.json({ success: true, message: "System refreshed successfully! All stuck processes killed and queue reset." });
+        rejectPendingConversionJobs('System refresh requested. PM2 restart scheduled.');
+
+        res.json({
+            success: true,
+            message: "System refresh started. The app is restarting now; please wait 10-15 seconds and try again."
+        });
+
+        schedulePm2Restart();
     } catch (err) {
         res.json({ success: false, message: err.message });
     }
 });
-
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, async () => {
     console.log(`Document Generator running on http://localhost:${PORT}`);
