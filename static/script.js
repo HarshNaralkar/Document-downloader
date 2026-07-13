@@ -298,6 +298,17 @@ function initFolderBrowse() {
   const clearBtn = document.getElementById('sigClearFolderBtn');
   const statusEl = document.getElementById('sigPathStatus');
 
+  // Hide Browse Folder button entirely on unsupported browsers (Firefox, Safari)
+  if (!window.showDirectoryPicker) {
+    if (browseBtn) {
+      browseBtn.style.display = 'none';
+    }
+    if (statusEl) {
+      statusEl.className = 'sig-path-status warning';
+      statusEl.textContent = '⚠️ Folder browsing is not supported in this browser. Please use Chrome, Edge, or Opera — or use the manual signature checkboxes below.';
+    }
+  }
+
   if (browseBtn) {
     browseBtn.addEventListener('click', handleFolderBrowse);
   }
@@ -361,7 +372,10 @@ async function handleFolderBrowse() {
   const statusEl = document.getElementById('sigPathStatus');
   try {
     if (!window.showDirectoryPicker) {
-      alert("Folder browsing is only supported on Chromium-based browsers (Chrome, Edge, Opera). Please use the manual signature checkboxes instead.");
+      if (statusEl) {
+        statusEl.className = 'sig-path-status error';
+        statusEl.textContent = '❌ Folder browsing is not supported in this browser. Please use Chrome, Edge, or Opera — or use the manual signature checkboxes below.';
+      }
       return;
     }
 
