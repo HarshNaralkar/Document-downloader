@@ -899,7 +899,11 @@ document.getElementById('trackForm').addEventListener('submit', async function(e
     } catch (err) {
         console.warn("Failed to rescan directory before submit:", err);
     }
-    // Using browsed folder path signatures
+    // Using browsed folder path signatures (showDirectoryPicker)
+    populateSigFilesMapFromScannedFolder();
+    submitWithSignatures();
+  } else if (selectedFolderName && Object.keys(scannedFolderData).length > 0) {
+    // Using webkitdirectory fallback (HTTP non-secure context) — data already in scannedFolderData
     populateSigFilesMapFromScannedFolder();
     submitWithSignatures();
   } else if (checkedSigTypes.length > 0) {
