@@ -575,6 +575,20 @@ async function convertDocxToPdf(docxPath, outputDir) {
     fs.mkdirSync(tempDir, { recursive: true });
 
     const loProfile = process.platform === 'win32' ? null : `/tmp/lo_profile_seq_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    if (loProfile) {
+        try {
+            fs.mkdirSync(`${loProfile}/user`, { recursive: true });
+            const loFontConfig = `<?xml version="1.0" encoding="UTF-8"?>
+<oor:items xmlns:oor="http://openoffice.org/2001/registry" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <item oor:path="/org.openoffice.Office.Writer/DefaultFont">
+    <prop oor:name="ComplexText" oor:op="fuse">
+      <value>Times New Roman</value>
+    </prop>
+  </item>
+</oor:items>`;
+            fs.writeFileSync(`${loProfile}/user/registrymodifications.xcu`, loFontConfig);
+        } catch (_) {}
+    }
 
     return new Promise((resolve, reject) => {
         let cmd;
@@ -1222,6 +1236,18 @@ try {
     const libreoffice = process.env.LIBREOFFICE_PATH || 'libreoffice';
     const sessionDir = path.dirname(conversions[0].docxPath);
     const loProfile = `/tmp/lo_profile_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    try {
+        fs.mkdirSync(`${loProfile}/user`, { recursive: true });
+        const loFontConfig = `<?xml version="1.0" encoding="UTF-8"?>
+<oor:items xmlns:oor="http://openoffice.org/2001/registry" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <item oor:path="/org.openoffice.Office.Writer/DefaultFont">
+    <prop oor:name="ComplexText" oor:op="fuse">
+      <value>Times New Roman</value>
+    </prop>
+  </item>
+</oor:items>`;
+        fs.writeFileSync(`${loProfile}/user/registrymodifications.xcu`, loFontConfig);
+    } catch (_) {}
     const docxList = conversions.map(c => `"${c.docxPath}"`).join(' ');
     const cmd = `"${libreoffice}" --headless --nodefault --nofirststartwizard --nolockcheck --nologo --norestore "-env:UserInstallation=file://${loProfile}" --convert-to pdf:writer_pdf_Export --outdir "${sessionDir}" ${docxList}`;
 
