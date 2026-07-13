@@ -293,7 +293,7 @@ let currentDropFiles = []; // files collected for the current modal step
 let scannedFolderData = {}; // srNum -> { employee_signature: File, sponsor_signature: File, stamp: File }
 let selectedFolderName = "";
 
-let selectedDirHandle = null;
+
 
 function initFolderBrowse() {
   const browseBtn = document.getElementById('sigBrowseFolderBtn');
