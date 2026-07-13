@@ -77,5 +77,4 @@ yarn.lock
 *.py
 unused/
 testing/
-fonts/
 sheet_cache.json
