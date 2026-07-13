@@ -81,6 +81,14 @@ function schedulePm2Restart() {
         return;
     }
 
+    if (process.env.RUNNING_IN_DOCKER) {
+        setTimeout(() => {
+            console.log('[Manual Refresh] Running inside Docker. Exiting process to trigger Docker daemon restart.');
+            process.exit(0);
+        }, 500);
+        return;
+    }
+
     const pm2AppName = process.env.PM2_APP_NAME || 'docgen';
     setTimeout(() => {
         console.log(`[Manual Refresh] Restarting PM2 app: ${pm2AppName}`);

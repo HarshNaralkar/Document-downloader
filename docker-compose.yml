@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: docgen-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-RootPass123!}
+      MYSQL_DATABASE: ${MYSQL_DB:-login}
+      MYSQL_USER: ${MYSQL_USER:-docgen}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-DocgenPass123!}
+    volumes:
+      - db_data:/var/lib/mysql
+    ports:
+      # Exposes MySQL port locally on VPS loopback only (for security)
+      - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u$$MYSQL_USER", "-p$$MYSQL_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: docgen-web
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # Maps Node.js application port to VPS port 5100
+      - "5100:5100"
+    environment:
+      - NODE_ENV=production
+      - PORT=5100
+      - MYSQL_HOST=db
+      - MYSQL_USER=${MYSQL_USER:-docgen}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-DocgenPass123!}
+      - MYSQL_DB=${MYSQL_DB:-login}
+      - SECRET_KEY=${SECRET_KEY}
+      - MAIL_USERNAME=${MAIL_USERNAME}
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - MAX_CONCURRENT_CONVERSIONS=1
+    volumes:
+      # Persist uploaded files, outputs, and logs
+      - ./downloads:/usr/src/app/downloads
+      - ./output:/usr/src/app/output
+      - ./logs:/usr/src/app/logs
+      # Mount sheet_cache.json so live Google sheet cache is preserved
+      - ./sheet_cache.json:/usr/src/app/sheet_cache.json
+
+volumes:
+  db_data:
+    driver: local

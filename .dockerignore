@@ -1,0 +1,18 @@
+# .dockerignore
+node_modules
+.venv
+.git
+.gitignore
+.agents
+downloads/*
+output/*
+*.log
+*.err
+*.out
+db_data/
+.env
+Dockerfile
+docker-compose.yml
+collect_fonts.ps1
+package-lock.json
+*.md

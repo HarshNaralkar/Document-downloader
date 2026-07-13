@@ -70,3 +70,12 @@ Desktop.ini
 # Lock Files (keep package-lock.json, ignore yarn.lock)
 # ========================
 yarn.lock
+
+# ========================
+# Ignored Project Directories & Python Scripts
+# ========================
+*.py
+unused/
+testing/
+fonts/
+sheet_cache.json
