@@ -292,71 +292,18 @@ let currentDropFiles = []; // files collected for the current modal step
 
 let scannedFolderData = {}; // srNum -> { employee_signature: File, sponsor_signature: File, stamp: File }
 let selectedFolderName = "";
-let selectedDirHandle = null;
 
 function initFolderBrowse() {
   const browseBtn = document.getElementById('sigBrowseFolderBtn');
   const clearBtn = document.getElementById('sigClearFolderBtn');
   const statusEl = document.getElementById('sigPathStatus');
 
-  // Create a hidden webkitdirectory input that works on plain HTTP
-  let folderInput = document.getElementById('_hiddenFolderInput');
-  if (!folderInput) {
-    folderInput = document.createElement('input');
-    folderInput.type = 'file';
-    folderInput.id = '_hiddenFolderInput';
-    folderInput.setAttribute('webkitdirectory', '');
-    folderInput.setAttribute('multiple', '');
-    folderInput.style.display = 'none';
-    document.body.appendChild(folderInput);
-
-    folderInput.addEventListener('change', async () => {
-      const files = Array.from(folderInput.files);
-      if (!files.length) return;
-      const statusEl2 = document.getElementById('sigPathStatus');
-      if (statusEl2) {
-        statusEl2.className = 'sig-path-status warning';
-        statusEl2.textContent = 'Scanning folder...';
-      }
-      try {
-        const stats = await scanDirectoryFromFileList(files);
-        if (statusEl2) {
-          statusEl2.className = 'sig-path-status success';
-          statusEl2.textContent = `✅ Successfully scanned. Found ${stats.totalSrFolders} SR folders (Employee: ${stats.employeeCount}, Sponsor: ${stats.sponsorCount}, Stamp: ${stats.stampCount}).`;
-        }
-        const folderNameSpan = document.getElementById('sigFolderName');
-        if (folderNameSpan && files[0]) {
-          // Get folder name from the first file's path
-          const parts = (files[0].webkitRelativePath || '').split('/');
-          selectedFolderName = parts[0] || 'Selected Folder';
-          folderNameSpan.textContent = selectedFolderName;
-        }
-        const clearBtnEl = document.getElementById('sigClearFolderBtn');
-        if (clearBtnEl) clearBtnEl.style.display = 'inline-block';
-        const checkboxes = document.querySelectorAll('.sig-check');
-        checkboxes.forEach(cb => { cb.checked = false; cb.disabled = true; });
-      } catch (err) {
-        if (statusEl2) {
-          statusEl2.className = 'sig-path-status error';
-          statusEl2.textContent = `❌ Error scanning: ${err.message}`;
-        }
-        clearFolderSelection();
-      }
-    });
-  }
-
   if (browseBtn) {
-    browseBtn.addEventListener('click', () => {
-      folderInput.value = '';
-      folderInput.click();
-    });
+    browseBtn.addEventListener('click', handleFolderBrowse);
   }
 
   if (clearBtn) {
-    clearBtn.addEventListener('click', () => {
-      clearFolderSelection();
-      folderInput.value = '';
-    });
+    clearBtn.addEventListener('click', clearFolderSelection);
   }
 
   // Setup mutual exclusion for checkboxes
@@ -367,7 +314,6 @@ function initFolderBrowse() {
       if (anyChecked) {
         if (selectedFolderName) {
           clearFolderSelection();
-          folderInput.value = '';
         }
         if (browseBtn) browseBtn.disabled = true;
         if (statusEl) {
@@ -412,63 +358,45 @@ function clearFolderSelection() {
 }
 
 async function handleFolderBrowse() {
+  const statusEl = document.getElementById('sigPathStatus');
+  try {
+    if (!window.showDirectoryPicker) {
+      alert("Folder browsing is only supported on Chromium-based browsers (Chrome, Edge, Opera). Please use the manual signature checkboxes instead.");
+      return;
+    }
+
+    const dirHandle = await window.showDirectoryPicker();
+    selectedDirHandle = dirHandle;
+    selectedFolderName = dirHandle.name;
+    
+    const folderNameSpan = document.getElementById('sigFolderName');
+    if (folderNameSpan) folderNameSpan.textContent = selectedFolderName;
+
+    const clearBtn = document.getElementById('sigClearFolderBtn');
+    if (clearBtn) clearBtn.style.display = 'inline-block';
+    
+    const checkboxes = document.querySelectorAll('.sig-check');
+    checkboxes.forEach(cb => {
+      cb.checked = false;
+      cb.disabled = true;
+    });
+
+    statusEl.className = 'sig-path-status warning';
+    statusEl.textContent = 'Scanning folder...';
+
+    const stats = await scanDirectory(dirHandle);
+
+    statusEl.className = 'sig-path-status success';
+    statusEl.textContent = `✅ Successfully scanned directory. Found ${stats.totalSrFolders} SR folders (Employee: ${stats.employeeCount}, Sponsor: ${stats.sponsorCount}, Stamp: ${stats.stampCount}).`;
+
+  } catch (err) {
+    console.error(err);
+    if (err.name !== 'AbortError') {
+      statusEl.className = 'sig-path-status error';
       statusEl.textContent = `❌ Error scanning: ${err.message}`;
       clearFolderSelection();
     }
   }
-}
-
-async function scanDirectoryFromFileList(files) {
-    scannedFolderData = {};
-    let totalSrFolders = 0;
-    let employeeCount = 0;
-    let sponsorCount = 0;
-    let stampCount = 0;
-    const seenFolders = new Set();
-
-    for (const file of files) {
-      const relPath = file.webkitRelativePath || file.name;
-      const parts = relPath.split('/');
-      if (parts.length < 2) continue; // skip root-level files
-
-      const folderName = parts[parts.length - 2];
-      const fname = parts[parts.length - 1];
-
-      const match = folderName.match(/^(\d+)/);
-      if (!match) continue;
-
-      const srNum = parseInt(match[1], 10);
-      if (!seenFolders.has(srNum)) {
-        seenFolders.add(srNum);
-        totalSrFolders++;
-      }
-
-      const base = fname.replace(/\.[^.]+$/, '').toLowerCase();
-      const ext = fname.split('.').pop().toLowerCase();
-
-      if (!['png', 'jpg', 'jpeg'].includes(ext)) continue;
-
-      let type = null;
-      if (base === 'pax') {
-        type = 'employee_signature';
-        employeeCount++;
-      } else if (base === 'spsg') {
-        type = 'sponsor_signature';
-        sponsorCount++;
-      } else if (base === 'stamp') {
-        type = 'stamp';
-        stampCount++;
-      }
-
-      if (type) {
-        const renamedFile = new File([file], `${srNum}.${ext}`, { type: file.type });
-        if (!scannedFolderData[srNum]) {
-          scannedFolderData[srNum] = {};
-        }
-        scannedFolderData[srNum][type] = renamedFile;
-      }
-    }
-    return { totalSrFolders, employeeCount, sponsorCount, stampCount };
 }
 
 async function scanDirectory(dirHandle) {

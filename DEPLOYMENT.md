@@ -61,6 +61,7 @@ sudo ./deploy.sh
 ---
 
 ### Step 6: Configure Environment Variables
+
 Create your production environment file:
 ```bash
 cp .env.example .env
