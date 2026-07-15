@@ -278,7 +278,7 @@ const SHEET_NAME = {
     "ROYAL_SKY_INTERNATIONAL": 'RS',
     "VIVAN": 'VI',
     "AR": 'AR',
-    "SNS_GLOBLE": 'SNS'
+    "SNS_GLOBLE": 'SG'
 };
 
 const COMPANY_GOOGLE_SHEETS = {
