@@ -295,8 +295,8 @@ const COMPANY_GOOGLE_SHEETS = {
         "sheet_id": "1hYiWttZnmkma8ejd9DKEJosa_-H2jow8vsbGfNUAj3Q"
     },
     "SNS_GLOBLE": {
-        "url": "https://docs.google.com/spreadsheets/d/1vgXggucKcJ09xXJj-mjraFnk_PH3iCEKm1iv6Teq7UI/edit?gid=787616279",
-        "sheet_id": "1vgXggucKcJ09xXJj-mjraFnk_PH3iCEKm1iv6Teq7UI"
+        "url": "https://docs.google.com/spreadsheets/d/16Wrr69M-itKrtmGPbUojhgghP-z_66_QMlUq2E2OMkE/edit?gid=2099504700#gid=2099504700",
+        "sheet_id": "16Wrr69M-itKrtmGPbUojhgghP-z_66_QMlUq2E2OMkE"
     }
 };
 
