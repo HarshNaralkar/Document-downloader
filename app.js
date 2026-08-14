@@ -283,8 +283,8 @@ const SHEET_NAME = {
 
 const COMPANY_GOOGLE_SHEETS = {
     "ROYAL_SKY_INTERNATIONAL": {
-        "url": "https://docs.google.com/spreadsheets/d/1vgXggucKcJ09xXJj-mjraFnk_PH3iCEKm1iv6Teq7UI/edit?gid=787616279",
-        "sheet_id": "1vgXggucKcJ09xXJj-mjraFnk_PH3iCEKm1iv6Teq7UI"
+        "url": "https://docs.google.com/spreadsheets/d/1IOKtGypEGGgwnDON-EgJxSuK73NvhRLqBlI0KlZWXUg/edit?gid=1503235617#gid=1503235617",
+        "sheet_id": "1IOKtGypEGGgwnDON-EgJxSuK73NvhRLqBlI0KlZWXUg"
     },
     "VIVAN": {
         "url": "https://docs.google.com/spreadsheets/d/1FcU1XCAGohd_bdqO3GJIgsKoucZhJieRNM_1Jmmbf94/edit?gid=0#gid=0",
