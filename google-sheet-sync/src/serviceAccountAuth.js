@@ -20,9 +20,21 @@ function resolveKeyFile(keyFile) {
 }
 
 function loadServiceAccountCredentials(keyFile) {
+    const directJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.PTLIST_SERVICE_ACCOUNT_JSON;
+    if (directJson) {
+        try {
+            const credentials = JSON.parse(directJson);
+            if (credentials.type === 'service_account' && credentials.client_email && credentials.private_key) {
+                return credentials;
+            }
+        } catch (err) {
+            console.error('[Google Auth] Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON:', err.message);
+        }
+    }
+
     const resolvedPath = resolveKeyFile(keyFile);
     if (!resolvedPath) {
-        throw new Error('GOOGLE_WORKER_SERVICE_ACCOUNT_KEY_FILE is required for private Google Sheets API sync');
+        throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON env var or GOOGLE_WORKER_SERVICE_ACCOUNT_KEY_FILE is required for Google Sheets API sync');
     }
 
     const credentials = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));

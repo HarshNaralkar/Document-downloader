@@ -51,9 +51,22 @@ function decryptField(ciphertext, keyBuf) {
 // ─── Drive API Download ──────────────────────────────────────────────────────
 
 function getDriveAccessToken(keyFile) {
-    const fs = require('fs');
-    const resolvedPath = path.isAbsolute(keyFile) ? keyFile : path.resolve(process.cwd(), keyFile);
-    const credentials = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
+    let credentials;
+    const directJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.PTLIST_SERVICE_ACCOUNT_JSON;
+    if (directJson) {
+        try {
+            credentials = JSON.parse(directJson);
+        } catch (err) {
+            console.error('[PTList Auth] Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON:', err.message);
+        }
+    }
+
+    if (!credentials) {
+        const fs = require('fs');
+        const resolvedPath = path.isAbsolute(keyFile) ? keyFile : path.resolve(process.cwd(), keyFile);
+        credentials = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
+    }
+
     const now = Math.floor(Date.now() / 1000);
 
     const header = { alg: 'RS256', typ: 'JWT' };
@@ -227,7 +240,9 @@ async function syncPtList(pool, config) {
     const encKey = getEncryptionKey();
 
     if (!sheetId) throw new Error('PTLIST_SHEET_ID is required');
-    if (!keyFile) throw new Error('GOOGLE_WORKER_SERVICE_ACCOUNT_KEY_FILE is required');
+    if (!keyFile && !process.env.GOOGLE_SERVICE_ACCOUNT_JSON && !process.env.PTLIST_SERVICE_ACCOUNT_JSON) {
+        throw new Error('GOOGLE_WORKER_SERVICE_ACCOUNT_KEY_FILE or GOOGLE_SERVICE_ACCOUNT_JSON is required');
+    }
 
     await initPtlistSchema(pool);
 
