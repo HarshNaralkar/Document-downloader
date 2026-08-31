@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sponsor Search — Document Downloader</title>
+    <meta name="description" content="Search sponsor records across all company sheets in real-time">
+    <link rel="stylesheet" href="search.css">
+</head>
+<body>
+    <div class="tricolor-ribbon"></div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <h1>Sponsor Search</h1>
+            <span class="badge">Real-Time</span>
+        </div>
+        <div class="header-right">
+            <a href="/" title="Go to Document Downloader" style="margin-right: 5px;">Document Downloader</a>
+            <a href="/ptlist" title="Go to PT List Database" style="margin-right: 15px; color: #818cf8; text-decoration: none; font-weight: 600; font-size: 14px;">PT List</a>
+            <div class="sync-status" id="syncStatus">
+
+                <span class="sync-dot" id="syncDot"></span>
+                <span id="syncText">Checking sync...</span>
+            </div>
+            <button class="dark-toggle" id="darkToggle" title="Toggle Dark Mode">🌞</button>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="main-layout">
+        <!-- Left Panel -->
+        <aside class="left-panel">
+            <div class="left-panel-header">
+                <!-- Manual Search -->
+                <div class="manual-search-row">
+                    <input type="text" id="manualSearch" class="manual-search-input" placeholder="🔍  Type sponsor name to search..." autocomplete="off">
+                    <button class="manual-search-btn" id="manualSearchBtn">Search</button>
+                </div>
+                <div class="divider-or"><span>OR filter by date</span></div>
+                <!-- Date + Company filter -->
+                <div class="filter-row">
+                    <label for="dateInput">Date</label>
+                    <input type="date" id="dateInput" class="date-input">
+                    <select id="companySelect" class="company-select">
+                        <option value="">All Companies</option>
+                    </select>
+                </div>
+                <div class="sponsor-count" id="sponsorCount">Select a date to load sponsors</div>
+            </div>
+            <div class="sponsor-list" id="sponsorList">
+                <div class="empty-state">
+                    <div class="icon">📅</div>
+                    <h3>Pick a Date</h3>
+                    <p>Select a date above to see sponsors, or type a sponsor name to search directly</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Right Panel -->
+        <main class="right-panel">
+            <div class="right-panel-header" id="rightHeader" style="display:none;">
+                <h2 id="resultTitle">Results</h2>
+                <div class="match-toggle-group" id="matchToggleGroup">
+                    <button class="match-toggle-btn active" id="btnPerfect">Perfect Match (0)</button>
+                    <button class="match-toggle-btn" id="btnClose">Close Match (0)</button>
+                </div>
+            </div>
+            <div class="table-container" id="tableContainer">
+                <div class="empty-state" id="rightEmpty">
+                    <div class="icon">🔍</div>
+                    <h3>Select a Sponsor</h3>
+                    <p>Click "Show" on any sponsor from the left panel, or use the search box to find records</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+    (function() {
+        'use strict';
+
+        const API_BASE = window.location.origin + '/search';
+
+        // DOM
+        const dateInput = document.getElementById('dateInput');
+        const companySelect = document.getElementById('companySelect');
+        const sponsorList = document.getElementById('sponsorList');
+        const sponsorCount = document.getElementById('sponsorCount');
+        const tableContainer = document.getElementById('tableContainer');
+        const rightHeader = document.getElementById('rightHeader');
+        const resultTitle = document.getElementById('resultTitle');
+        const darkToggle = document.getElementById('darkToggle');
+        const toast = document.getElementById('toast');
+        const syncDot = document.getElementById('syncDot');
+        const syncText = document.getElementById('syncText');
+        const manualSearch = document.getElementById('manualSearch');
+        const manualSearchBtn = document.getElementById('manualSearchBtn');
+
+        const btnPerfect = document.getElementById('btnPerfect');
+        const btnClose = document.getElementById('btnClose');
+
+        // Results State
+        let currentPerfectMatches = [];
+        let currentCloseMatches = [];
+        let currentTabMode = 'perfect'; // 'perfect' or 'close'
+
+        // ===== Dark Mode =====
+        if (localStorage.getItem('search-dark-mode') === 'true') {
+            document.body.classList.add('dark-mode');
+            darkToggle.textContent = '🌑';
+        }
+        darkToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            darkToggle.textContent = isDark ? '🌑' : '🌞';
+            localStorage.setItem('search-dark-mode', isDark);
+        });
+
+        // ===== Set today's date =====
+        const now = new Date();
+        dateInput.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
+        // ===== Toast =====
+        let toastTimer = null;
+        function showToast(msg, type = 'error') {
+            toast.textContent = type === 'error' ? `⚠ ${msg}` : `✓ ${msg}`;
+            toast.className = `toast ${type} show`;
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => toast.classList.remove('show'), 4000);
+        }
+
+        // ===== Load company tabs =====
+        async function loadTabs() {
+            try {
+                const res = await fetch(`${API_BASE}/api/tabs`);
+                const json = await res.json();
+                if (json.success && json.data) {
+                    json.data.forEach(tab => {
+                        const opt = document.createElement('option');
+                        opt.value = tab.name;
+                        opt.textContent = tab.name;
+                        companySelect.appendChild(opt);
+                    });
+                }
+            } catch (e) { /* silent */ }
+        }
+
+        // ===== Sync status & Auto-refresh =====
+        let lastFinishedAt = null;
+
+        async function checkSyncStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/api/sync-status`);
+                const json = await res.json();
+                if (json.success && json.data) {
+                    const d = json.data;
+                    if (d.status === 'success') {
+                        syncDot.className = 'sync-dot synced';
+                        const ago = timeAgo(new Date(d.finishedAt));
+                        syncText.textContent = `Synced ${ago}`;
+
+                        // Auto-refresh UI when new sync data is saved
+                        if (lastFinishedAt && d.finishedAt && d.finishedAt !== lastFinishedAt) {
+                            console.log('[Auto Refresh] New sheet sync detected. Updating view automatically...');
+                            showToast('New sheet data auto-synced! Updated view.', 'success');
+                            if (dateInput.value) loadSponsors(dateInput.value);
+                            const currentQuery = manualSearch.value.trim();
+                            if (currentQuery) {
+                                searchBySponsor(currentQuery);
+                            }
+                        }
+                        lastFinishedAt = d.finishedAt;
+                    } else if (d.status === 'running') {
+                        syncDot.className = 'sync-dot syncing';
+                        syncText.textContent = 'Syncing...';
+                    } else {
+                        syncDot.className = 'sync-dot error';
+                        syncText.textContent = 'Sync error';
+                    }
+                } else {
+                    syncDot.className = 'sync-dot';
+                    syncText.textContent = 'No sync data';
+                }
+            } catch (e) {
+                syncDot.className = 'sync-dot error';
+                syncText.textContent = 'Server offline';
+            }
+        }
+
+        function timeAgo(date) {
+            const sec = Math.floor((Date.now() - date.getTime()) / 1000);
+            if (sec < 60) return `${sec}s ago`;
+            if (sec < 3600) return `${Math.floor(sec/60)}m ago`;
+            if (sec < 86400) return `${Math.floor(sec/3600)}h ago`;
+            return `${Math.floor(sec/86400)}d ago`;
+        }
+
+        // ===== Skeleton =====
+        function showSponsorSkeleton() {
+            let html = '';
+            for (let i = 0; i < 8; i++) {
+                html += `<div class="skeleton-row">
+                    <div class="skeleton-block" style="width:28px;height:28px;border-radius:6px;flex-shrink:0;"></div>
+                    <div class="skeleton-block" style="flex:3;height:12px;"></div>
+                    <div class="skeleton-block" style="width:50px;height:26px;border-radius:6px;"></div>
+                </div>`;
+            }
+            sponsorList.innerHTML = html;
+        }
+
+        function showTableLoading() {
+            rightHeader.style.display = 'none';
+            tableContainer.innerHTML = `<div class="empty-state">
+                <div class="spinner"></div>
+                <h3>Searching all sheets...</h3>
+                <p>Querying Royal Sky, Vivan, AR, SNS, and GreenVally databases</p>
+            </div>`;
+        }
+
+        // ===== Helpers =====
+        function getTabBadgeClass(tabName) {
+            const t = (tabName || '').toUpperCase();
+            if (t.includes('ROYAL')) return 'royal';
+            if (t.includes('VIVAN')) return 'vivan';
+            if (t.includes('AR')) return 'ar';
+            if (t.includes('SNS')) return 'sns';
+            if (t.includes('GREEN')) return 'greenvally';
+            return 'royal';
+        }
+
+        function getTabShortName(tabName) {
+            const t = (tabName || '').toUpperCase();
+            if (t.includes('ROYAL')) return 'RSI';
+            if (t.includes('VIVAN')) return 'VIV';
+            if (t.includes('AR')) return 'AR';
+            if (t.includes('SNS')) return 'SNS';
+            if (t.includes('GREEN')) return 'GV';
+            return tabName;
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '—';
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return dateStr;
+            return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`;
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+        function escapeAttr(str) {
+            return String(str).replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+
+        // ===== Load sponsors for date =====
+        async function loadSponsors(date) {
+            if (!date) return;
+            showSponsorSkeleton();
+            sponsorCount.innerHTML = 'Loading...';
+
+            try {
+                const tab = companySelect.value;
+                const t0 = performance.now();
+                let url = `${API_BASE}/api/sponsors-by-date?date=${encodeURIComponent(date)}`;
+                if (tab) url += `&tab=${encodeURIComponent(tab)}`;
+
+                const res = await fetch(url);
+                const json = await res.json();
+                const elapsed = Math.round(performance.now() - t0);
+
+                if (!json.success) {
+                    showToast(json.message || 'Failed to load sponsors');
+                    sponsorList.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><h3>Error</h3><p>${escapeHtml(json.message||'Failed')}</p></div>`;
+                    sponsorCount.textContent = '';
+                    return;
+                }
+
+                const sponsors = json.data || [];
+                sponsorCount.innerHTML = `<strong>${sponsors.length}</strong> record${sponsors.length!==1?'s':''} found &nbsp;·&nbsp; ${elapsed}ms`;
+
+                if (sponsors.length === 0) {
+                    sponsorList.innerHTML = `<div class="empty-state"><div class="icon">📭</div><h3>No Records</h3><p>No sponsors found for this date${tab ? ' in ' + tab : ''}. Try another date.</p></div>`;
+                    return;
+                }
+
+                renderSponsorList(sponsors);
+            } catch (err) {
+                showToast('Network error: ' + err.message);
+                sponsorList.innerHTML = `<div class="empty-state"><div class="icon">🌐</div><h3>Connection Error</h3><p>Could not reach the server.</p></div>`;
+                sponsorCount.textContent = '';
+            }
+        }
+
+        function renderSponsorList(sponsors) {
+            let html = '';
+            for (const sp of sponsors) {
+                const name = escapeHtml(sp.sponsor_name);
+                const cr = sp.cr_number ? escapeHtml(sp.cr_number) : '—';
+                const sr = sp.sr_no || '—';
+                const badgeClass = getTabBadgeClass(sp.tab_name);
+                const shortTab = getTabShortName(sp.tab_name);
+
+                html += `<div class="sponsor-item" data-name="${escapeAttr(sp.sponsor_name)}">
+                    <div class="sponsor-sr">${escapeHtml(sr)}</div>
+                    <div class="sponsor-info">
+                        <div class="sponsor-name" title="${escapeAttr(sp.sponsor_name)}">${name}</div>
+                        <div class="sponsor-meta">
+                            <span class="sponsor-cr">CR: ${cr}</span>
+                            <span class="sponsor-tab-mini ${badgeClass}">${shortTab}</span>
+                        </div>
+                    </div>
+                    <button class="show-btn">Show</button>
+                </div>`;
+            }
+            sponsorList.innerHTML = html;
+
+            sponsorList.querySelectorAll('.sponsor-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const sponsorName = item.dataset.name;
+                    sponsorList.querySelectorAll('.sponsor-item').forEach(el => el.classList.remove('active'));
+                    item.classList.add('active');
+                    searchBySponsor(sponsorName);
+                });
+            });
+        }
+
+        // ===== Search by sponsor name =====
+        async function searchBySponsor(sponsorName) {
+            showTableLoading();
+
+            try {
+                const tab = companySelect.value;
+                const t0 = performance.now();
+                let url = `${API_BASE}/api/by-sponsor?name=${encodeURIComponent(sponsorName)}`;
+                if (tab) url += `&tab=${encodeURIComponent(tab)}`;
+
+                const res = await fetch(url);
+                const json = await res.json();
+                const elapsed = Math.round(performance.now() - t0);
+
+                if (!json.success) {
+                    showToast(json.message || 'Search failed');
+                    return;
+                }
+
+                currentPerfectMatches = json.data.perfectMatches || [];
+                currentCloseMatches = json.data.closeMatches || [];
+
+                rightHeader.style.display = 'flex';
+                resultTitle.textContent = sponsorName;
+
+                // Update tabs badge counts
+                btnPerfect.textContent = `Perfect Match (${currentPerfectMatches.length})`;
+                btnClose.textContent = `Close Match (${currentCloseMatches.length})`;
+
+                // Always select perfect match by default
+                setTabMode('perfect');
+
+                showToast(`Found ${currentPerfectMatches.length + currentCloseMatches.length} records in ${elapsed}ms`, 'success');
+            } catch (err) {
+                showToast('Network error: ' + err.message);
+                tableContainer.innerHTML = `<div class="empty-state"><div class="icon">🌐</div><h3>Connection Error</h3><p>${escapeHtml(err.message)}</p></div>`;
+            }
+        }
+
+        function setTabMode(mode) {
+            currentTabMode = mode;
+            if (mode === 'perfect') {
+                btnPerfect.classList.add('active');
+                btnClose.classList.remove('active');
+                renderResultsTable(currentPerfectMatches, 'No perfect matches found. Check "Close Match" for variations.');
+            } else {
+                btnClose.classList.add('active');
+                btnPerfect.classList.remove('active');
+                renderResultsTable(currentCloseMatches, 'No close match variations found.');
+            }
+        }
+
+        btnPerfect.addEventListener('click', () => setTabMode('perfect'));
+        btnClose.addEventListener('click', () => setTabMode('close'));
+
+        function renderResultsTable(records, emptyMessage) {
+            if (records.length === 0) {
+                tableContainer.innerHTML = `<div class="empty-state"><div class="icon">🔎</div><h3>No Results</h3><p>${emptyMessage}</p></div>`;
+                return;
+            }
+
+            let html = `<table class="results-table">
+                <thead><tr>
+                    <th>Source</th><th>Date</th><th>SR#</th><th>Sponsor Name</th>
+                    <th>FE Number</th><th>DM Number</th><th>Country</th><th>CR Number</th>
+                </tr></thead><tbody>`;
+
+            for (const r of records) {
+                const bc = getTabBadgeClass(r.tab_name);
+                html += `<tr>
+                    <td><span class="tab-badge ${bc}">${escapeHtml(r.tab_name||'')}</span></td>
+                    <td>${formatDate(r.date)}</td>
+                    <td>${escapeHtml(r.sr_no||'—')}</td>
+                    <td class="sponsor-cell" title="${escapeAttr(r.sponsor_name||'')}">${escapeHtml(r.sponsor_name||'—')}</td>
+                    <td>${escapeHtml(r.fe_number||'—')}</td>
+                    <td>${escapeHtml(r.dm_number||'—')}</td>
+                    <td>${escapeHtml(r.country||'—')}</td>
+                    <td>${escapeHtml(r.cr_number||'—')}</td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+            tableContainer.innerHTML = html;
+        }
+
+        // ===== Live manual search (debounced) =====
+        let searchTimeout = null;
+        function doManualSearch() {
+            const query = manualSearch.value.trim();
+            if (!query) {
+                // If query is empty, reset back to date-based sponsors
+                resetRightPanel();
+                loadSponsors(dateInput.value);
+                return;
+            }
+            sponsorList.querySelectorAll('.sponsor-item').forEach(el => el.classList.remove('active'));
+            searchBySponsor(query);
+        }
+
+        manualSearch.addEventListener('input', () => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(doManualSearch, 300);
+        });
+
+        manualSearchBtn.addEventListener('click', doManualSearch);
+
+        // ===== Events =====
+        dateInput.addEventListener('change', () => {
+            resetRightPanel();
+            loadSponsors(dateInput.value);
+        });
+
+        companySelect.addEventListener('change', () => {
+            resetRightPanel();
+            if (dateInput.value) loadSponsors(dateInput.value);
+        });
+
+        function resetRightPanel() {
+            rightHeader.style.display = 'none';
+            tableContainer.innerHTML = `<div class="empty-state"><div class="icon">🔍</div><h3>Select a Sponsor</h3><p>Click "Show" on any sponsor or use the search box</p></div>`;
+        }
+
+        // ===== Init =====
+        loadTabs();
+        loadSponsors(dateInput.value);
+        checkSyncStatus();
+        setInterval(checkSyncStatus, 10000); // refresh sync status every 10s for fast auto-refresh
+    })();
+    </script>
+</body>
+</html>

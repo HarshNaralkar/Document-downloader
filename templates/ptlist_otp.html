@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PT List — Enter OTP</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='loginpage.css') }}">
+    <style>
+        .otp-subtitle {
+            text-align: center;
+            color: #555;
+            font-size: 0.9rem;
+            margin-top: -10px;
+            margin-bottom: 1.2rem;
+            line-height: 1.4;
+        }
+        .email-badge {
+            color: #1877f2;
+            font-weight: 700;
+        }
+        .otp-input {
+            text-align: center;
+            letter-spacing: 6px;
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+        .cancel-link {
+            display: block;
+            text-align: center;
+            margin-top: 15px;
+            color: #666;
+            text-decoration: underline;
+            font-size: 0.9rem;
+        }
+        .cancel-link:hover {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% set messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+
+        <div class="form active">
+            <h2>Enter Security OTP</h2>
+            <div class="otp-subtitle">
+                Enter the 6-digit OTP code sent to:<br>
+                <span class="email-badge">{{ pending_email }}</span>
+            </div>
+
+            <form method="POST" action="/ptlist/verify-otp">
+                <input type="text" name="otp" class="otp-input" placeholder="6-Digit OTP" maxlength="6" pattern="[0-9]{6}" required autofocus autocomplete="off"><br>
+                <button type="submit" style="background: #28a745;">Verify & Unlock PT List</button>
+            </form>
+
+            <a href="/ptlist" class="cancel-link">Cancel and Start Over</a>
+        </div>
+    </div>
+</body>
+</html>

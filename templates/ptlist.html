@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PT List — Document Downloader</title>
+    <meta name="description" content="Search encrypted PT records in real-time">
+    <link rel="stylesheet" href="/static/search.css">
+
+    <style>
+        /* Single-view full height layout with fixed search and scrollable table */
+        html, body {
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        .ptlist-page {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+            padding: 16px 24px;
+            gap: 14px;
+            min-height: 0;
+        }
+
+        /* Fixed Top Search Bar - Non-scrollable */
+        .search-top-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            padding: 14px 20px;
+            box-shadow: var(--shadow-sm);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .search-top-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            max-width: 650px;
+        }
+
+        .search-top-input {
+            flex: 1;
+            padding: 10px 16px;
+            border: 1.5px solid var(--border-medium);
+            border-radius: var(--radius-sm);
+            font-size: 0.9rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: 500;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+            outline: none;
+            transition: all var(--transition);
+        }
+        .search-top-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(40,44,108,0.12);
+        }
+
+        .search-top-btn {
+            padding: 9px 22px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition);
+            white-space: nowrap;
+        }
+        .search-top-btn:hover {
+            background: var(--accent-hover);
+        }
+
+        .search-top-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.82rem;
+            color: var(--text-muted);
+        }
+        .search-top-right strong {
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        /* Table Card Container - Takes remaining space, Table body is scrollable */
+        .table-card-main {
+            background: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-sm);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        .table-scroll-wrapper {
+            flex: 1;
+            overflow: auto;
+            min-height: 0;
+        }
+
+        .table-scroll-wrapper::-webkit-scrollbar { width: 6px; height: 6px; }
+        .table-scroll-wrapper::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 3px; }
+
+        .pt-full-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 0.85rem;
+        }
+
+        .pt-full-table thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .pt-full-table th {
+            background: var(--accent);
+            color: #ffffff;
+            font-weight: 700;
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            border: none;
+        }
+        .pt-full-table th:first-child { border-radius: var(--radius-sm) 0 0 0; }
+        .pt-full-table th:last-child { border-radius: 0 var(--radius-sm) 0 0; }
+
+        .pt-full-table td {
+            padding: 11px 16px;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border-light);
+            color: var(--text-primary);
+            white-space: nowrap;
+        }
+
+        .pt-full-table tbody tr:hover td {
+            background: var(--accent-light);
+        }
+
+        .tag-fe-val {
+            background: #eef2ff;
+            color: #4f46e5;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-family: monospace;
+        }
+        body.dark-mode .tag-fe-val {
+            background: #1e1b4b;
+            color: #818cf8;
+        }
+
+        .tag-pwd-val {
+            background: #ecfdf5;
+            color: #059669;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-family: monospace;
+        }
+        body.dark-mode .tag-pwd-val {
+            background: #064e3b;
+            color: #34d399;
+        }
+
+        .tag-newpwd-val {
+            background: #fffbeb;
+            color: #d97706;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-family: monospace;
+        }
+        body.dark-mode .tag-newpwd-val {
+            background: #451a03;
+            color: #fbbf24;
+        }
+
+        .tag-country-val {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-medium);
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-medium);
+            border-radius: var(--radius-md);
+            width: 100%;
+            max-width: 480px;
+            padding: 24px;
+            color: var(--text-primary);
+            box-shadow: var(--shadow-lg);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-light);
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        .allowed-email-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-sm);
+            margin-bottom: 8px;
+            font-size: 0.875rem;
+        }
+        .btn-delete-email {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #ef4444;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        body.dark-mode .btn-delete-email {
+            background: #450a0a;
+            border-color: #7f1d1d;
+            color: #fca5a5;
+        }
+        .add-email-form {
+            display: flex;
+            gap: 8px;
+            margin-top: 14px;
+        }
+        .add-email-input {
+            flex: 1;
+            padding: 10px 14px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-medium);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            outline: none;
+        }
+        .btn-add-email {
+            padding: 10px 16px;
+            background: var(--accent);
+            color: #ffffff;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-weight: 600;
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="tricolor-ribbon"></div>
+
+    <!-- Fixed Header matching Sponsor Search -->
+    <header class="header">
+        <div class="header-left">
+            <h1>PT List</h1>
+            <span class="badge">Decrypted Vault</span>
+        </div>
+        <div class="header-right">
+            <a href="/" title="Go to Document Downloader">Document Downloader</a>
+            <a href="/search" title="Go to Sponsor Search">Sponsor Search</a>
+            <button id="openAccessModalBtn" style="background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 5px 12px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;">Manage Access</button>
+            <a href="/ptlist/lock" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; padding: 5px 12px; border-radius: 6px; font-weight: 600; font-size: 13px; text-decoration: none;">Lock Session</a>
+            <div class="sync-status" id="syncStatus">
+                <span class="sync-dot synced" id="syncDot"></span>
+                <span id="syncText">3-Min Sync</span>
+            </div>
+            <button class="dark-toggle" id="darkToggle" title="Toggle Dark Mode">🌞</button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="ptlist-page">
+        <!-- Fixed Non-Scrollable Search Bar Top Panel -->
+        <div class="search-top-panel">
+            <div class="search-top-left">
+                <input type="text" id="searchInput" class="search-top-input" placeholder="🔍 Type company name or FE ID to search..." autofocus autocomplete="off">
+                <button class="search-top-btn" id="searchBtn">Search</button>
+            </div>
+            <div class="search-top-right">
+                <span id="resultsCount"><strong>0</strong> records found</span>
+            </div>
+        </div>
+
+        <!-- Table Card: Only Table Data Body Scrolls -->
+        <div class="table-card-main">
+            <div class="table-scroll-wrapper">
+                <table class="pt-full-table">
+                    <thead>
+                        <tr>
+                            <th>SUB DATE</th>
+                            <th>COMPANY NAME</th>
+                            <th>FE ID</th>
+                            <th>PWD</th>
+                            <th>COUNTRY</th>
+                            <th>NEW PWD</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody">
+                        <tr>
+                            <td colspan="6">
+                                <div class="empty-state">
+                                    <div class="icon">🔍</div>
+                                    <h3>Loading Records</h3>
+                                    <p>Fetching PT records from database...</p>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Authorized People Admin Modal -->
+    <div class="modal-overlay" id="accessModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 style="font-size: 1.1rem; font-weight: 700;">Authorized People Access</h3>
+                <button class="modal-close" id="closeAccessModalBtn">&times;</button>
+            </div>
+            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
+                People listed below are authorized to request OTP and access the PT List database.
+            </p>
+
+            <div id="accessMsg" style="margin-bottom: 10px; font-size: 0.85rem; display: none;"></div>
+
+            <div id="allowedEmailsList" style="max-height: 240px; overflow-y: auto;">
+                <div style="text-align: center; color: var(--text-muted); padding: 16px;">Loading...</div>
+            </div>
+
+            <form id="addEmailForm" class="add-email-form">
+                <input type="email" id="newEmailInput" class="add-email-input" placeholder="New Person Email ID" required>
+                <button type="submit" class="btn-add-email">Add Person</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            'use strict';
+
+            const searchInput = document.getElementById('searchInput');
+            const searchBtn = document.getElementById('searchBtn');
+            const resultsBody = document.getElementById('resultsBody');
+            const resultsCount = document.getElementById('resultsCount');
+            const darkToggle = document.getElementById('darkToggle');
+
+            let debounceTimer = null;
+
+            // Dark Mode Handler
+            function initTheme() {
+                const saved = localStorage.getItem('theme');
+                if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.body.classList.add('dark-mode');
+                    darkToggle.textContent = '🌙';
+                } else {
+                    document.body.classList.remove('dark-mode');
+                    darkToggle.textContent = '🌞';
+                }
+            }
+
+            darkToggle.addEventListener('click', () => {
+                document.body.classList.toggle('dark-mode');
+                const isDark = document.body.classList.contains('dark-mode');
+                localStorage.setItem('theme', isDark ? 'dark' : 'light');
+                darkToggle.textContent = isDark ? '🌙' : '🌞';
+            });
+
+            initTheme();
+
+            // Fetch & Render Records directly in Single Main Table
+            async function fetchRecords(query = '') {
+                try {
+                    const res = await fetch(`/ptlist/api/search?q=${encodeURIComponent(query)}`);
+                    if (res.status === 401 || res.status === 403) {
+                        window.location.href = '/ptlist';
+                        return;
+                    }
+                    const data = await res.json();
+                    renderTable(data.records || []);
+                } catch (err) {
+                    console.error('Fetch error:', err);
+                    resultsBody.innerHTML = `
+                        <tr>
+                            <td colspan="6">
+                                <div class="empty-state">
+                                    <div class="icon">⚠️</div>
+                                    <h3>Error Loading Records</h3>
+                                    <p>Could not fetch data from database.</p>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }
+            }
+
+            function renderTable(records) {
+                resultsCount.innerHTML = `<strong>${records.length}</strong> records found`;
+
+                if (records.length === 0) {
+                    resultsBody.innerHTML = `
+                        <tr>
+                            <td colspan="6">
+                                <div class="empty-state">
+                                    <div class="icon">🔍</div>
+                                    <h3>No Matching Records Found</h3>
+                                    <p>Try searching for a different company or FE ID</p>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                resultsBody.innerHTML = records.map(r => {
+                    const subDate = escapeHtml(r.sub_date || '—');
+                    const companyName = escapeHtml(r.company_name || '—');
+                    const feId = r.fe_id ? `<span class="tag-fe-val">${escapeHtml(r.fe_id)}</span>` : '<span style="color: var(--text-muted);">—</span>';
+                    const pwd = r.pwd ? `<span class="tag-pwd-val">${escapeHtml(r.pwd)}</span>` : '<span style="color: var(--text-muted);">—</span>';
+                    const country = r.country ? `<span class="tag-country-val">${escapeHtml(r.country)}</span>` : '<span style="color: var(--text-muted);">—</span>';
+                    const newPwd = r.new_pwd ? `<span class="tag-newpwd-val">${escapeHtml(r.new_pwd)}</span>` : '<span style="color: var(--text-muted);">—</span>';
+
+                    return `
+                        <tr>
+                            <td style="font-family: monospace;">${subDate}</td>
+                            <td style="font-weight: 700; color: var(--text-primary);">${companyName}</td>
+                            <td>${feId}</td>
+                            <td>${pwd}</td>
+                            <td>${country}</td>
+                            <td>${newPwd}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+
+            function escapeHtml(str) {
+                if (!str) return '';
+                return String(str)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            // Search Event Listeners
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.trim();
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    fetchRecords(query);
+                }, 200);
+            });
+
+            searchBtn.addEventListener('click', () => {
+                fetchRecords(searchInput.value.trim());
+            });
+
+            // Initial load
+            fetchRecords('');
+
+            // Auto-refresh every 30 seconds
+            setInterval(() => {
+                fetchRecords(searchInput.value.trim());
+            }, 30000);
+
+            // ─── Allowed Emails Admin Modal Logic ─────────────────────────────
+            const accessModal = document.getElementById('accessModal');
+            const openAccessModalBtn = document.getElementById('openAccessModalBtn');
+            const closeAccessModalBtn = document.getElementById('closeAccessModalBtn');
+            const allowedEmailsList = document.getElementById('allowedEmailsList');
+            const addEmailForm = document.getElementById('addEmailForm');
+            const newEmailInput = document.getElementById('newEmailInput');
+            const accessMsg = document.getElementById('accessMsg');
+
+            function showAccessMsg(text, isError = false) {
+                accessMsg.style.display = 'block';
+                accessMsg.style.color = isError ? '#ef4444' : '#10b981';
+                accessMsg.innerText = text;
+                setTimeout(() => { accessMsg.style.display = 'none'; }, 4000);
+            }
+
+            async function loadAllowedEmails() {
+                allowedEmailsList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 16px;">Loading authorized people...</div>';
+                try {
+                    const res = await fetch('/ptlist/api/allowed-emails');
+                    const data = await res.json();
+                    if (data.success && data.emails) {
+                        renderAllowedEmails(data.emails);
+                    } else {
+                        allowedEmailsList.innerHTML = '<div style="color: #ef4444; padding: 8px;">Failed to load list</div>';
+                    }
+                } catch (err) {
+                    console.error(err);
+                }
+            }
+
+            function renderAllowedEmails(emails) {
+                if (emails.length === 0) {
+                    allowedEmailsList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 16px;">No authorized people found</div>';
+                    return;
+                }
+                allowedEmailsList.innerHTML = emails.map(e => `
+                    <div class="allowed-email-item">
+                        <div>
+                            <div style="font-weight: 600; color: var(--text-primary);">${escapeHtml(e.email)}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Added by ${escapeHtml(e.added_by || 'system')} (${escapeHtml(e.created_at || '')})</div>
+                        </div>
+                        <button class="btn-delete-email" onclick="deleteAllowedEmail(${e.id})">Revoke Access</button>
+                    </div>
+                `).join('');
+            }
+
+            openAccessModalBtn.addEventListener('click', () => {
+                accessModal.classList.add('active');
+                loadAllowedEmails();
+            });
+
+            closeAccessModalBtn.addEventListener('click', () => {
+                accessModal.classList.remove('active');
+            });
+
+            addEmailForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const email = newEmailInput.value.trim();
+                if (!email) return;
+
+                try {
+                    const res = await fetch('/ptlist/api/allowed-emails/add', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        newEmailInput.value = '';
+                        showAccessMsg(data.message);
+                        loadAllowedEmails();
+                    } else {
+                        showAccessMsg(data.error || 'Failed to add person', true);
+                    }
+                } catch (err) {
+                    showAccessMsg('Network error', true);
+                }
+            });
+
+            window.deleteAllowedEmail = async function (id) {
+                if (!confirm('Are you sure you want to revoke PT List access for this email?')) return;
+                try {
+                    const res = await fetch('/ptlist/api/allowed-emails/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        showAccessMsg(data.message);
+                        loadAllowedEmails();
+                    } else {
+                        showAccessMsg(data.error || 'Failed to revoke access', true);
+                    }
+                } catch (err) {
+                    showAccessMsg('Network error', true);
+                }
+            };
+        })();
+    </script>
+</body>
+</html>

@@ -6,8 +6,15 @@
 .env.*
 !.env.example
 
+# Service Account Keys & Credentials
+key/
+*/key/
+*.json
+!package.json
+!package-lock.json
+
 # ========================
-# Node.js
+# Node.js & Dependencies
 # ========================
 node_modules/
 npm-debug.log*
@@ -15,18 +22,15 @@ yarn-debug.log*
 yarn-error.log*
 
 # ========================
-# Generated Output Files
-# (Per-session PDFs / DOCXs — never commit these)
+# Generated Output Files & Downloads
 # ========================
 output/
-
-# ========================
-# Temporary Conversion Files
-# (PowerShell scripts, LibreOffice profiles)
-# ========================
-_tmp_*.ps1
 uploads/
 /tmp/
+*.xlsx
+*.xls
+*.csv
+pt_sheet_test.xlsx
 
 # ========================
 # Server Logs
@@ -65,14 +69,13 @@ Desktop.ini
 ~WR*.tmp
 ~WRL*.tmp
 
-
 # ========================
-# Lock Files (keep package-lock.json, ignore yarn.lock)
+# Lock Files
 # ========================
 yarn.lock
 
 # ========================
-# Ignored Project Directories & Python Scripts
+# Ignored Project Directories & Scripts
 # ========================
 *.py
 unused/

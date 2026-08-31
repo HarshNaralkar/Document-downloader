@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PT List — Security Verification</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='loginpage.css') }}">
+    <style>
+        .gate-subtitle {
+            text-align: center;
+            color: #555;
+            font-size: 0.9rem;
+            margin-top: -10px;
+            margin-bottom: 1.2rem;
+            line-height: 1.4;
+        }
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 15px;
+            color: #1877f2;
+            text-decoration: underline;
+            font-size: 0.9rem;
+        }
+        .back-link:hover {
+            color: #0f71f1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% set messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+
+        <!-- Login Form -->
+        <div id="loginForm" class="form active">
+            <h2>PT List Verification</h2>
+            <div class="gate-subtitle">Enter your authorized email and account password. An OTP verification code will be sent to your email.</div>
+
+            <form method="POST" action="/ptlist/auth">
+                <input type="email" name="email" placeholder="Authorized Email ID" required value="{{ user_email or '' }}"><br>
+                <input type="password" name="password" placeholder="Account Password" required><br>
+                <a href="/forgot-password" class="forgot-link">Forgot Password?</a>
+                <button type="submit">Send Security OTP</button>
+            </form>
+            <span class="toggle-link" onclick="showForm('registerForm')">Don't have an account? Register new user</span>
+            <a href="/" class="back-link">← Back to Document Downloader</a>
+        </div>
+
+        <!-- Register Form -->
+        <div id="registerForm" class="form">
+            <h2>Register New User</h2>
+            <div class="gate-subtitle">Create a new account. Registration requires Admin OTP approval.</div>
+
+            <form method="POST" action="/register">
+                <input type="email" name="email" placeholder="New Email ID" required><br>
+                <input type="password" name="password" placeholder="Choose Password" required><br>
+                <button type="submit" style="background: #28a745;">Register User</button>
+            </form>
+            <span class="toggle-link" onclick="showForm('loginForm')">Already have an account? Login</span>
+            <a href="/" class="back-link">← Back to Document Downloader</a>
+        </div>
+    </div>
+
+    <script>
+        function showForm(formId) {
+            document.getElementById('loginForm').classList.remove('active');
+            document.getElementById('registerForm').classList.remove('active');
+            document.getElementById(formId).classList.add('active');
+        }
+    </script>
+</body>
+</html>

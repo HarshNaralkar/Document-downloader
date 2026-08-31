@@ -21,6 +21,7 @@ const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 dotenv.config();
+dotenv.config({ path: path.join(__dirname, 'google-sheet-sync', '.env'), override: false });
 
 const app = express();
 
@@ -241,8 +242,68 @@ async function initDb() {
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         `);
+        await poolConnection.query(`
+            CREATE TABLE IF NOT EXISTS ptlist_allowed_emails (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                email VARCHAR(255) NOT NULL UNIQUE,
+                added_by VARCHAR(255) NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Seed default allowed emails (Admin email + PTLIST_ALLOWED_EMAILS env)
+        const defaultAdmin = process.env.ADMIN_EMAIL || 'hn.harshnaralkar@gmail.com';
+        const envAllowed = (process.env.PTLIST_ALLOWED_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
+        const initialList = [...new Set([defaultAdmin, ...envAllowed])];
+
+        for (const email of initialList) {
+            await poolConnection.query(
+                "INSERT IGNORE INTO ptlist_allowed_emails (email, added_by) VALUES (?, 'system')",
+                [email.toLowerCase()]
+            );
+        }
+
         poolConnection.release();
-        console.log('MySQL Database initialized successfully');
+        console.log('MySQL Database & PT List Allowed Emails initialized successfully');
+
+
+        // Production-ready search router & background worker sync mount using dedicated google_sheet_sync database pool
+        (async () => {
+            try {
+                const { createSearchRouter } = require('./google-sheet-sync/src/searchRoutes');
+                const { createReadyPoolFromEnv } = require('./google-sheet-sync/db/createPool');
+                const { loadSyncConfig } = require('./google-sheet-sync/config/syncConfig');
+                const { startGoogleSheetSyncScheduler } = require('./google-sheet-sync/src/scheduler');
+                const syncConfig = loadSyncConfig();
+                const syncPool = await createReadyPoolFromEnv();
+                app.use('/search', loginRequired, createSearchRouter({ pool: syncPool, config: syncConfig }));
+                console.log('[Search Router] Sponsor Search page mounted on /search using google_sheet_sync database');
+
+                if (syncConfig.sync.autoSync) {
+                    startGoogleSheetSyncScheduler({
+                        pool: syncPool,
+                        config: syncConfig,
+                        onResult: result => console.log('[Google Sheet Sync]', JSON.stringify(result.totals || result)),
+                        onError: error => console.error('[Google Sheet Sync Error]', error.message || error)
+                    });
+                    console.log(`[Google Sheet Sync] Background auto-sync started inside main app (interval: ${syncConfig.sync.intervalMs} ms)`);
+                }
+
+                // PT List Background Auto-Sync
+                const { initPtlistSchema, startPtlistSyncScheduler } = require('./google-sheet-sync/src/ptlistSync');
+                await initPtlistSchema(pool);
+                startPtlistSyncScheduler({
+                    pool: pool,
+                    config: {},
+                    onResult: result => console.log('[PT List Sync]', JSON.stringify(result)),
+                    onError: error => console.error('[PT List Sync Error]', error.message || error)
+                });
+                console.log('[PT List Sync] Background auto-sync started inside main app');
+            } catch (searchErr) {
+
+                console.warn('[Search Router] Could not mount search router or start worker sync:', searchErr.message);
+            }
+        })();
     } catch (err) {
         console.error('MySQL Database initialization failed:', err);
     }
@@ -265,6 +326,14 @@ function loginRequired(req, res, next) {
     }
     res.redirect('/');
 }
+
+function ptlistRequired(req, res, next) {
+    if (req.session && req.session.user && req.session.ptlist_verified) {
+        return next();
+    }
+    res.redirect('/ptlist');
+}
+
 
 // Global configurations matching Python code
 const COMPANY_TEMPLATES = {
@@ -1814,8 +1883,214 @@ app.post('/reset-password/:token', async (req, res) => {
     }
 });
 
+// ─── PT LIST PROTECTED ROUTES ──────────────────────────────────────────────────
+
+// Landing/Gate GET handler
+app.get('/ptlist', loginRequired, (req, res) => {
+    if (req.session.ptlist_verified) {
+        return res.render('ptlist.html');
+    }
+    if (req.session.pending_ptlist_email) {
+        return res.render('ptlist_otp.html', { pending_email: req.session.pending_ptlist_email });
+    }
+    return res.render('ptlist_gate.html', { user_email: req.session.user ? req.session.user.email : '' });
+});
+
+// Credentials Submission POST handler (Email + Password -> OTP)
+app.post('/ptlist/auth', loginRequired, async (req, res) => {
+    const { email, password } = req.body;
+    try {
+        // Query ptlist_allowed_emails database table
+        const [allowedRows] = await pool.query(
+            "SELECT id FROM ptlist_allowed_emails WHERE LOWER(email) = LOWER(?)",
+            [email.trim()]
+        );
+        const adminEmail = (process.env.ADMIN_EMAIL || 'hn.harshnaralkar@gmail.com').toLowerCase();
+        const isAllowed = allowedRows.length > 0 || email.trim().toLowerCase() === adminEmail;
+
+        if (!isAllowed) {
+            req.flash('danger', 'Access denied. Your email is not authorized for PT List access.');
+            return req.session.save(() => res.redirect('/ptlist'));
+        }
+
+        // Verify password against users table
+        const [rows] = await pool.query("SELECT id, password_hash FROM users WHERE email = ?", [email.trim()]);
+        const user = rows[0];
+
+
+        if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+            req.flash('danger', 'Invalid password for PT List authorization.');
+            return req.session.save(() => res.redirect('/ptlist'));
+        }
+
+        // Generate 6-digit OTP
+        const otp = generateOtp();
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+        await pool.query(
+            "INSERT INTO otps (user_email, otp_code, expires_at, purpose) VALUES (?, ?, ?, ?)",
+            [email.trim(), otp, expiresAt, 'ptlist']
+        );
+
+        await transporter.sendMail({
+            from: process.env.MAIL_USERNAME,
+            to: email.trim(),
+            subject: 'Your PT List Security Verification OTP',
+            text: `Your OTP for accessing the PT List database is: ${otp}\nThis code will expire in 5 minutes.`
+        });
+
+        req.session.pending_ptlist_email = email.trim();
+        req.flash('info', 'Security OTP sent to your authorized email.');
+        req.session.save(() => res.redirect('/ptlist'));
+    } catch (err) {
+        console.error('[PTList Auth Error]', err);
+        req.flash('danger', 'An error occurred during PT List authentication.');
+        req.session.save(() => res.redirect('/ptlist'));
+    }
+});
+
+// OTP Verification POST handler
+app.post('/ptlist/verify-otp', loginRequired, async (req, res) => {
+    const { otp } = req.body;
+    const email = req.session.pending_ptlist_email;
+
+    if (!email) {
+        req.flash('danger', 'Session expired. Please re-enter your credentials.');
+        return req.session.save(() => res.redirect('/ptlist'));
+    }
+
+    try {
+        const [rows] = await pool.query(
+            "SELECT id, expires_at FROM otps WHERE user_email = ? AND otp_code = ? AND purpose = 'ptlist' ORDER BY id DESC LIMIT 1",
+            [email, otp]
+        );
+        const record = rows[0];
+
+        if (record && new Date() < new Date(record.expires_at)) {
+            await pool.query("DELETE FROM otps WHERE id = ?", [record.id]);
+            delete req.session.pending_ptlist_email;
+            req.session.ptlist_verified = true;
+
+            req.flash('success', 'PT List Access Granted ✓');
+            req.session.save(() => res.redirect('/ptlist'));
+        } else {
+            req.flash('danger', 'Invalid or expired OTP code.');
+            req.session.save(() => res.redirect('/ptlist'));
+        }
+    } catch (err) {
+        console.error('[PTList OTP Error]', err);
+        req.flash('danger', 'An error occurred during OTP verification.');
+        req.session.save(() => res.redirect('/ptlist'));
+    }
+});
+
+// Lock Session GET handler
+app.get('/ptlist/lock', loginRequired, (req, res) => {
+    delete req.session.ptlist_verified;
+    delete req.session.pending_ptlist_email;
+    req.flash('info', 'PT List session locked.');
+    req.session.save(() => res.redirect('/ptlist'));
+});
+
+// PT List Search API (Protected by ptlistRequired)
+app.get('/ptlist/api/search', ptlistRequired, async (req, res) => {
+    const query = String(req.query.q || '').trim();
+    try {
+        const { getEncryptionKey, decryptField } = require('./google-sheet-sync/src/ptlistSync');
+        const key = getEncryptionKey();
+
+        let sql = `
+            SELECT sub_date, company_name, fe_id, email_id_enc, pwd_enc, country, new_pwd_enc
+            FROM ptlist_records
+            WHERE is_active = TRUE
+        `;
+        const params = [];
+
+        if (query) {
+            sql += ` AND (company_name LIKE ? OR fe_id LIKE ?)`;
+            params.push(`%${query}%`, `%${query}%`);
+        }
+
+        sql += ` ORDER BY source_row ASC LIMIT 200`;
+
+        const [rows] = await pool.query(sql, params);
+
+        const records = rows.map(r => ({
+            sub_date: r.sub_date || '',
+            company_name: r.company_name || '',
+            fe_id: r.fe_id || '',
+            pwd: decryptField(r.pwd_enc, key),
+            country: r.country || '',
+            new_pwd: decryptField(r.new_pwd_enc, key)
+        }));
+
+        res.json({ count: records.length, records });
+    } catch (err) {
+        console.error('[PTList API Error]', err);
+        res.status(500).json({ error: 'Failed to search PT List database' });
+    }
+});
+
+// PT List Allowed Emails Management APIs (Protected by ptlistRequired)
+app.get('/ptlist/api/allowed-emails', ptlistRequired, async (req, res) => {
+    try {
+        const [rows] = await pool.query("SELECT id, email, added_by, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') as created_at FROM ptlist_allowed_emails ORDER BY id ASC");
+        res.json({ success: true, emails: rows });
+    } catch (err) {
+        console.error('[PTList Allowed Emails GET Error]', err);
+        res.status(500).json({ error: 'Failed to fetch allowed emails' });
+    }
+});
+
+app.post('/ptlist/api/allowed-emails/add', ptlistRequired, express.json(), async (req, res) => {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+        return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+
+    try {
+        const addedBy = req.session.user ? req.session.user.email : 'admin';
+        await pool.query(
+            "INSERT INTO ptlist_allowed_emails (email, added_by) VALUES (?, ?)",
+            [email, addedBy]
+        );
+        res.json({ success: true, message: `Added ${email} to authorized PT List access.` });
+    } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY') {
+            return res.status(400).json({ error: 'Email is already authorized.' });
+        }
+        console.error('[PTList Allowed Emails ADD Error]', err);
+        res.status(500).json({ error: 'Failed to add allowed email.' });
+    }
+});
+
+app.post('/ptlist/api/allowed-emails/delete', ptlistRequired, express.json(), async (req, res) => {
+    const id = parseInt(req.body.id, 10);
+    if (!id) {
+        return res.status(400).json({ error: 'Invalid ID.' });
+    }
+
+    try {
+        const [targetRows] = await pool.query("SELECT email FROM ptlist_allowed_emails WHERE id = ?", [id]);
+        const target = targetRows[0];
+        const adminEmail = (process.env.ADMIN_EMAIL || 'hn.harshnaralkar@gmail.com').toLowerCase();
+
+        if (target && target.email.toLowerCase() === adminEmail) {
+            return res.status(400).json({ error: 'Cannot remove primary admin email.' });
+        }
+
+        await pool.query("DELETE FROM ptlist_allowed_emails WHERE id = ?", [id]);
+        res.json({ success: true, message: 'Access revoked successfully.' });
+    } catch (err) {
+        console.error('[PTList Allowed Emails DELETE Error]', err);
+        res.status(500).json({ error: 'Failed to revoke email access.' });
+    }
+});
+
 // Dashboard landing route
 app.get('/dashboard', loginRequired, (req, res) => {
+
+
     res.render('index.html', { email: req.session.user.email });
 });
 
