@@ -78,6 +78,8 @@ yarn.lock
 # Ignored Project Directories & Scripts
 # ========================
 *.py
+*.md
 unused/
 testing/
 sheet_cache.json
+
