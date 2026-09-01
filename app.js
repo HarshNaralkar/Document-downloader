@@ -1908,28 +1908,19 @@ app.get('/ptlist/lock', loginRequired, (req, res) => {
 
 // PT List Search API (Protected by loginRequired)
 app.get('/ptlist/api/search', loginRequired, async (req, res) => {
-    const query = String(req.query.q || '').trim();
+    const query = String(req.query.q || '').trim().toLowerCase();
     try {
         const { getEncryptionKey, decryptField } = require('./google-sheet-sync/src/ptlistSync');
         const key = getEncryptionKey();
 
-        let sql = `
-            SELECT code, dolphin, sub_date, company_name, fe_id, email_id_enc, email_pwd_enc, pwd_enc, country, new_pwd_enc
+        const [rows] = await pool.query(`
+            SELECT code, dolphin, sub_date, company_name, fe_id, email_id_enc, email_pwd_enc, pwd_enc, country, pt_number, new_pwd_enc
             FROM ptlist_records
             WHERE is_active = TRUE
-        `;
-        const params = [];
+            ORDER BY source_row ASC
+        `);
 
-        if (query) {
-            sql += ` AND (company_name LIKE ? OR fe_id LIKE ? OR code LIKE ? OR dolphin LIKE ? OR pt_number LIKE ?)`;
-            params.push(`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`);
-        }
-
-        sql += ` ORDER BY source_row ASC LIMIT 200`;
-
-        const [rows] = await pool.query(sql, params);
-
-        const records = rows.map(r => ({
+        let records = rows.map(r => ({
             code: r.code || r.dolphin || '',
             sub_date: r.sub_date || '',
             company_name: r.company_name || '',
@@ -1938,8 +1929,26 @@ app.get('/ptlist/api/search', loginRequired, async (req, res) => {
             country: r.country || '',
             email_id: decryptField(r.email_id_enc, key),
             email_pwd: decryptField(r.email_pwd_enc, key),
-            new_pwd: decryptField(r.new_pwd_enc, key)
+            new_pwd: decryptField(r.new_pwd_enc, key),
+            pt_number: r.pt_number || ''
         }));
+
+        if (query) {
+            records = records.filter(r => (
+                r.code.toLowerCase().includes(query) ||
+                r.company_name.toLowerCase().includes(query) ||
+                r.fe_id.toLowerCase().includes(query) ||
+                r.email_id.toLowerCase().includes(query) ||
+                r.email_pwd.toLowerCase().includes(query) ||
+                r.pwd.toLowerCase().includes(query) ||
+                r.new_pwd.toLowerCase().includes(query) ||
+                r.country.toLowerCase().includes(query) ||
+                r.pt_number.toLowerCase().includes(query) ||
+                r.sub_date.toLowerCase().includes(query)
+            ));
+        }
+
+        records = records.slice(0, 200);
 
         res.json({ count: records.length, records });
     } catch (err) {
