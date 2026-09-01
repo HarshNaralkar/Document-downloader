@@ -120,9 +120,10 @@
 
         .pt-full-table {
             width: 100%;
+            table-layout: fixed;
             border-collapse: separate;
             border-spacing: 0;
-            font-size: 0.85rem;
+            font-size: 0.78rem;
         }
 
         .pt-full-table thead {
@@ -135,23 +136,38 @@
             background: var(--accent);
             color: #ffffff;
             font-weight: 700;
-            padding: 12px 16px;
+            padding: 8px 6px;
             text-align: left;
-            font-size: 0.75rem;
+            font-size: 0.70rem;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.3px;
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
             border: none;
         }
         .pt-full-table th:first-child { border-radius: var(--radius-sm) 0 0 0; }
         .pt-full-table th:last-child { border-radius: 0 var(--radius-sm) 0 0; }
 
+        .pt-full-table th:nth-child(1) { width: 9%; }  /* CODE */
+        .pt-full-table th:nth-child(2) { width: 9%; }  /* SUB DATE */
+        .pt-full-table th:nth-child(3) { width: 22%; } /* COMPANY NAME */
+        .pt-full-table th:nth-child(4) { width: 10%; } /* FE ID */
+        .pt-full-table th:nth-child(5) { width: 10%; } /* PWD */
+        .pt-full-table th:nth-child(6) { width: 6%; }  /* COUNTRY */
+        .pt-full-table th:nth-child(7) { width: 15%; } /* EMAIL ID */
+        .pt-full-table th:nth-child(8) { width: 8%; }  /* EMAIL PWD */
+        .pt-full-table th:nth-child(9) { width: 11%; } /* NEW PWD */
+
         .pt-full-table td {
-            padding: 11px 16px;
+            padding: 6px 6px;
             background: var(--bg-card);
             border-bottom: 1px solid var(--border-light);
             color: var(--text-primary);
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 0.76rem;
         }
 
         .pt-full-table tbody tr:hover td {
@@ -162,9 +178,15 @@
             background: #f3e8ff;
             color: #7e22ce;
             font-weight: 700;
-            padding: 3px 8px;
-            border-radius: 6px;
+            padding: 2px 6px;
+            border-radius: 4px;
             font-family: monospace;
+            font-size: 0.73rem;
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: middle;
         }
         body.dark-mode .tag-code-val {
             background: #3b0764;
@@ -175,9 +197,15 @@
             background: #eef2ff;
             color: #4f46e5;
             font-weight: 700;
-            padding: 3px 8px;
-            border-radius: 6px;
+            padding: 2px 6px;
+            border-radius: 4px;
             font-family: monospace;
+            font-size: 0.73rem;
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: middle;
         }
         body.dark-mode .tag-fe-val {
             background: #1e1b4b;
@@ -188,9 +216,15 @@
             background: #ecfdf5;
             color: #059669;
             font-weight: 700;
-            padding: 3px 8px;
-            border-radius: 6px;
+            padding: 2px 6px;
+            border-radius: 4px;
             font-family: monospace;
+            font-size: 0.73rem;
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: middle;
         }
         body.dark-mode .tag-pwd-val {
             background: #064e3b;
@@ -201,9 +235,15 @@
             background: #fffbeb;
             color: #d97706;
             font-weight: 700;
-            padding: 3px 8px;
-            border-radius: 6px;
+            padding: 2px 6px;
+            border-radius: 4px;
             font-family: monospace;
+            font-size: 0.73rem;
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: middle;
         }
         body.dark-mode .tag-newpwd-val {
             background: #451a03;
@@ -214,15 +254,25 @@
             background: var(--bg-primary);
             border: 1px solid var(--border-medium);
             color: var(--text-secondary);
-            font-size: 0.75rem;
+            font-size: 0.70rem;
             font-weight: 600;
-            padding: 2px 8px;
+            padding: 1px 5px;
             border-radius: 4px;
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: middle;
         }
 
         .tag-email-val {
             color: #4f46e5;
             font-weight: 600;
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: middle;
         }
         body.dark-mode .tag-email-val {
             color: #818cf8;
@@ -232,9 +282,15 @@
             background: #f0fdf4;
             color: #15803d;
             font-weight: 700;
-            padding: 3px 8px;
-            border-radius: 6px;
+            padding: 2px 6px;
+            border-radius: 4px;
             font-family: monospace;
+            font-size: 0.73rem;
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: middle;
         }
         body.dark-mode .tag-emailpwd-val {
             background: #14532d;
@@ -386,27 +442,35 @@
                 }
 
                 resultsBody.innerHTML = records.map(r => {
-                    const code = r.code ? `<span class="tag-code-val">${escapeHtml(r.code)}</span>` : '<span style="color: var(--text-muted);">—</span>';
-                    const subDate = escapeHtml(r.sub_date || '—');
-                    const companyName = escapeHtml(r.company_name || '—');
-                    const feId = r.fe_id ? `<span class="tag-fe-val">${escapeHtml(r.fe_id)}</span>` : '<span style="color: var(--text-muted);">—</span>';
-                    const pwd = r.pwd ? `<span class="tag-pwd-val">${escapeHtml(r.pwd)}</span>` : '<span style="color: var(--text-muted);">—</span>';
-                    const country = r.country ? `<span class="tag-country-val">${escapeHtml(r.country)}</span>` : '<span style="color: var(--text-muted);">—</span>';
-                    const emailId = r.email_id ? `<span class="tag-email-val">${escapeHtml(r.email_id)}</span>` : '<span style="color: var(--text-muted);">—</span>';
-                    const emailPwd = r.email_pwd ? `<span class="tag-emailpwd-val">${escapeHtml(r.email_pwd)}</span>` : '<span style="color: var(--text-muted);">—</span>';
-                    const newPwd = r.new_pwd ? `<span class="tag-newpwd-val">${escapeHtml(r.new_pwd)}</span>` : '<span style="color: var(--text-muted);">—</span>';
+                    const rawCode = r.code || '';
+                    const rawSubDate = r.sub_date || '';
+                    const rawCompanyName = r.company_name || '';
+                    const rawFeId = r.fe_id || '';
+                    const rawPwd = r.pwd || '';
+                    const rawCountry = r.country || '';
+                    const rawEmailId = r.email_id || '';
+                    const rawEmailPwd = r.email_pwd || '';
+                    const rawNewPwd = r.new_pwd || '';
+
+                    const code = rawCode ? `<span class="tag-code-val" title="${escapeAttr(rawCode)}">${escapeHtml(rawCode)}</span>` : '<span style="color: var(--text-muted);">—</span>';
+                    const feId = rawFeId ? `<span class="tag-fe-val" title="${escapeAttr(rawFeId)}">${escapeHtml(rawFeId)}</span>` : '<span style="color: var(--text-muted);">—</span>';
+                    const pwd = rawPwd ? `<span class="tag-pwd-val" title="${escapeAttr(rawPwd)}">${escapeHtml(rawPwd)}</span>` : '<span style="color: var(--text-muted);">—</span>';
+                    const country = rawCountry ? `<span class="tag-country-val" title="${escapeAttr(rawCountry)}">${escapeHtml(rawCountry)}</span>` : '<span style="color: var(--text-muted);">—</span>';
+                    const emailId = rawEmailId ? `<span class="tag-email-val" title="${escapeAttr(rawEmailId)}">${escapeHtml(rawEmailId)}</span>` : '<span style="color: var(--text-muted);">—</span>';
+                    const emailPwd = rawEmailPwd ? `<span class="tag-emailpwd-val" title="${escapeAttr(rawEmailPwd)}">${escapeHtml(rawEmailPwd)}</span>` : '<span style="color: var(--text-muted);">—</span>';
+                    const newPwd = rawNewPwd ? `<span class="tag-newpwd-val" title="${escapeAttr(rawNewPwd)}">${escapeHtml(rawNewPwd)}</span>` : '<span style="color: var(--text-muted);">—</span>';
 
                     return `
                         <tr>
-                            <td>${code}</td>
-                            <td style="font-family: monospace;">${subDate}</td>
-                            <td style="font-weight: 700; color: var(--text-primary);">${companyName}</td>
-                            <td>${feId}</td>
-                            <td>${pwd}</td>
-                            <td>${country}</td>
-                            <td>${emailId}</td>
-                            <td>${emailPwd}</td>
-                            <td>${newPwd}</td>
+                            <td title="${escapeAttr(rawCode)}">${code}</td>
+                            <td style="font-family: monospace;" title="${escapeAttr(rawSubDate)}">${escapeHtml(rawSubDate || '—')}</td>
+                            <td style="font-weight: 700; color: var(--text-primary);" title="${escapeAttr(rawCompanyName)}">${escapeHtml(rawCompanyName || '—')}</td>
+                            <td title="${escapeAttr(rawFeId)}">${feId}</td>
+                            <td title="${escapeAttr(rawPwd)}">${pwd}</td>
+                            <td title="${escapeAttr(rawCountry)}">${country}</td>
+                            <td title="${escapeAttr(rawEmailId)}">${emailId}</td>
+                            <td title="${escapeAttr(rawEmailPwd)}">${emailPwd}</td>
+                            <td title="${escapeAttr(rawNewPwd)}">${newPwd}</td>
                         </tr>
                     `;
                 }).join('');
@@ -418,6 +482,14 @@
                     .replace(/&/g, '&amp;')
                     .replace(/</g, '&lt;')
                     .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            function escapeAttr(str) {
+                if (!str) return '';
+                return String(str)
+                    .replace(/&/g, '&amp;')
                     .replace(/"/g, '&quot;')
                     .replace(/'/g, '&#039;');
             }
