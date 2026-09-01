@@ -360,8 +360,12 @@
                 btnPerfect.textContent = `Perfect Match (${currentPerfectMatches.length})`;
                 btnClose.textContent = `Close Match (${currentCloseMatches.length})`;
 
-                // Always select perfect match by default
-                setTabMode('perfect');
+                // Select close match automatically if no perfect match found but close match exists
+                if (currentPerfectMatches.length === 0 && currentCloseMatches.length > 0) {
+                    setTabMode('close');
+                } else {
+                    setTabMode('perfect');
+                }
 
                 showToast(`Found ${currentPerfectMatches.length + currentCloseMatches.length} records in ${elapsed}ms`, 'success');
             } catch (err) {
