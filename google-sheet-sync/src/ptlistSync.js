@@ -118,13 +118,15 @@ function parseXlsxToRecords(buffer) {
         // Skip completely empty rows
         if (!r || r.every(cell => !String(cell).trim())) continue;
 
+        const codeVal = String(r[0] || '').trim();
         const companyName = String(r[3] || '').trim();
-        const feId = String(r[8] || '').trim();
-        // Skip rows with no company name AND no FE ID (likely garbage)
-        if (!companyName && !feId) continue;
+        const feId = String(r[9] || '').trim();
+        // Skip rows with no company name AND no FE ID AND no Code (likely garbage)
+        if (!companyName && !feId && !codeVal) continue;
 
         records.push({
-            dolphin: String(r[0] || '').trim(),
+            code: codeVal,
+            dolphin: codeVal,
             sr_no: String(r[1] || '').trim(),
             sub_date: String(r[2] || '').trim(),
             company_name: companyName,
@@ -132,10 +134,11 @@ function parseXlsxToRecords(buffer) {
             pt_number: String(r[5] || '').trim(),
             status: String(r[6] || '').trim(),
             email_id_plain: String(r[7] || '').trim(),
+            email_pwd_plain: String(r[8] || '').trim(),
             fe_id: feId,
-            pwd_plain: String(r[9] || '').trim(),
-            new_pwd_plain: String(r[10] || '').trim(),
-            status2: String(r[11] || '').trim(),
+            pwd_plain: String(r[10] || '').trim(),
+            new_pwd_plain: String(r[11] || '').trim(),
+            status2: String(r[12] || '').trim(),
             source_row: i + 1
         });
     }
@@ -148,6 +151,7 @@ function parseXlsxToRecords(buffer) {
 const CREATE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS ptlist_records (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     source_row INT NOT NULL,
+    code VARCHAR(255) NULL,
     dolphin VARCHAR(255) NULL,
     sr_no VARCHAR(80) NULL,
     sub_date VARCHAR(80) NULL,
@@ -156,6 +160,7 @@ const CREATE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS ptlist_records (
     pt_number VARCHAR(255) NULL,
     status VARCHAR(255) NULL,
     email_id_enc TEXT NULL,
+    email_pwd_enc TEXT NULL,
     fe_id VARCHAR(255) NULL,
     pwd_enc TEXT NULL,
     new_pwd_enc TEXT NULL,
@@ -168,18 +173,28 @@ const CREATE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS ptlist_records (
     UNIQUE KEY uq_source_row (source_row),
     KEY idx_company_name (company_name),
     KEY idx_fe_id (fe_id),
+    KEY idx_code (code),
     KEY idx_active (is_active)
 )`;
 
 function computeRowHash(record) {
-    const raw = [record.dolphin, record.sr_no, record.sub_date, record.company_name,
-        record.country, record.pt_number, record.status, record.email_id_plain,
+    const raw = [record.code || record.dolphin, record.sr_no, record.sub_date, record.company_name,
+        record.country, record.pt_number, record.status, record.email_id_plain, record.email_pwd_plain,
         record.fe_id, record.pwd_plain, record.new_pwd_plain, record.status2].join('|');
     return crypto.createHash('sha256').update(raw).digest('hex');
 }
 
 async function initPtlistSchema(pool) {
     await pool.query(CREATE_TABLE_SQL);
+
+    // Safely add missing columns for existing tables
+    try {
+        await pool.query("ALTER TABLE ptlist_records ADD COLUMN code VARCHAR(255) NULL AFTER source_row");
+    } catch (e) { /* column already exists */ }
+
+    try {
+        await pool.query("ALTER TABLE ptlist_records ADD COLUMN email_pwd_enc TEXT NULL AFTER email_id_enc");
+    } catch (e) { /* column already exists */ }
 }
 
 async function upsertPtlistRecords(pool, records, encKey) {
@@ -195,24 +210,25 @@ async function upsertPtlistRecords(pool, records, encKey) {
         const ex = existing.get(record.source_row);
 
         const emailEnc = encryptField(record.email_id_plain, encKey);
+        const emailPwdEnc = encryptField(record.email_pwd_plain, encKey);
         const pwdEnc = encryptField(record.pwd_plain, encKey);
         const newPwdEnc = encryptField(record.new_pwd_plain, encKey);
 
         if (!ex) {
             await pool.query(
-                `INSERT INTO ptlist_records (source_row, dolphin, sr_no, sub_date, company_name, country, pt_number, status, email_id_enc, fe_id, pwd_enc, new_pwd_enc, status2, row_hash, is_active)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
-                [record.source_row, record.dolphin, record.sr_no, record.sub_date, record.company_name,
-                 record.country, record.pt_number, record.status, emailEnc, record.fe_id,
+                `INSERT INTO ptlist_records (source_row, code, dolphin, sr_no, sub_date, company_name, country, pt_number, status, email_id_enc, email_pwd_enc, fe_id, pwd_enc, new_pwd_enc, status2, row_hash, is_active)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
+                [record.source_row, record.code, record.dolphin, record.sr_no, record.sub_date, record.company_name,
+                 record.country, record.pt_number, record.status, emailEnc, emailPwdEnc, record.fe_id,
                  pwdEnc, newPwdEnc, record.status2, hash]
             );
             stats.inserted++;
         } else if (ex.row_hash !== hash || !ex.is_active) {
             await pool.query(
-                `UPDATE ptlist_records SET dolphin=?, sr_no=?, sub_date=?, company_name=?, country=?, pt_number=?, status=?, email_id_enc=?, fe_id=?, pwd_enc=?, new_pwd_enc=?, status2=?, row_hash=?, is_active=TRUE
+                `UPDATE ptlist_records SET code=?, dolphin=?, sr_no=?, sub_date=?, company_name=?, country=?, pt_number=?, status=?, email_id_enc=?, email_pwd_enc=?, fe_id=?, pwd_enc=?, new_pwd_enc=?, status2=?, row_hash=?, is_active=TRUE
                  WHERE source_row=?`,
-                [record.dolphin, record.sr_no, record.sub_date, record.company_name,
-                 record.country, record.pt_number, record.status, emailEnc, record.fe_id,
+                [record.code, record.dolphin, record.sr_no, record.sub_date, record.company_name,
+                 record.country, record.pt_number, record.status, emailEnc, emailPwdEnc, record.fe_id,
                  pwdEnc, newPwdEnc, record.status2, hash, record.source_row]
             );
             stats.updated++;

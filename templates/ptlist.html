@@ -158,6 +158,19 @@
             background: var(--accent-light);
         }
 
+        .tag-code-val {
+            background: #f3e8ff;
+            color: #7e22ce;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-family: monospace;
+        }
+        body.dark-mode .tag-code-val {
+            background: #3b0764;
+            color: #c084fc;
+        }
+
         .tag-fe-val {
             background: #eef2ff;
             color: #4f46e5;
@@ -207,93 +220,25 @@
             border-radius: 4px;
         }
 
-        /* Modal Styles */
-        .modal-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(4px);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
+        .tag-email-val {
+            color: #4f46e5;
+            font-weight: 600;
         }
-        .modal-overlay.active { display: flex; }
-        .modal-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-medium);
-            border-radius: var(--radius-md);
-            width: 100%;
-            max-width: 480px;
-            padding: 24px;
-            color: var(--text-primary);
-            box-shadow: var(--shadow-lg);
+        body.dark-mode .tag-email-val {
+            color: #818cf8;
         }
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid var(--border-light);
-        }
-        .modal-close {
-            background: none;
-            border: none;
-            color: var(--text-muted);
-            font-size: 1.5rem;
-            cursor: pointer;
-        }
-        .allowed-email-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 14px;
-            background: var(--bg-primary);
-            border: 1px solid var(--border-light);
-            border-radius: var(--radius-sm);
-            margin-bottom: 8px;
-            font-size: 0.875rem;
-        }
-        .btn-delete-email {
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            color: #ef4444;
-            padding: 4px 10px;
+
+        .tag-emailpwd-val {
+            background: #f0fdf4;
+            color: #15803d;
+            font-weight: 700;
+            padding: 3px 8px;
             border-radius: 6px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            cursor: pointer;
+            font-family: monospace;
         }
-        body.dark-mode .btn-delete-email {
-            background: #450a0a;
-            border-color: #7f1d1d;
-            color: #fca5a5;
-        }
-        .add-email-form {
-            display: flex;
-            gap: 8px;
-            margin-top: 14px;
-        }
-        .add-email-input {
-            flex: 1;
-            padding: 10px 14px;
-            background: var(--bg-primary);
-            border: 1px solid var(--border-medium);
-            border-radius: var(--radius-sm);
-            color: var(--text-primary);
-            font-size: 0.875rem;
-            outline: none;
-        }
-        .btn-add-email {
-            padding: 10px 16px;
-            background: var(--accent);
-            color: #ffffff;
-            border: none;
-            border-radius: var(--radius-sm);
-            font-weight: 600;
-            font-size: 0.875rem;
-            cursor: pointer;
+        body.dark-mode .tag-emailpwd-val {
+            background: #14532d;
+            color: #4ade80;
         }
     </style>
 </head>
@@ -309,8 +254,6 @@
         <div class="header-right">
             <a href="/" title="Go to Document Downloader">Document Downloader</a>
             <a href="/search" title="Go to Sponsor Search">Sponsor Search</a>
-            <button id="openAccessModalBtn" style="background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 5px 12px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;">Manage Access</button>
-            <a href="/ptlist/lock" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; padding: 5px 12px; border-radius: 6px; font-weight: 600; font-size: 13px; text-decoration: none;">Lock Session</a>
             <div class="sync-status" id="syncStatus">
                 <span class="sync-dot synced" id="syncDot"></span>
                 <span id="syncText">3-Min Sync</span>
@@ -324,7 +267,7 @@
         <!-- Fixed Non-Scrollable Search Bar Top Panel -->
         <div class="search-top-panel">
             <div class="search-top-left">
-                <input type="text" id="searchInput" class="search-top-input" placeholder="🔍 Type company name or FE ID to search..." autofocus autocomplete="off">
+                <input type="text" id="searchInput" class="search-top-input" placeholder="🔍 Type company name, FE ID, or Code to search..." autofocus autocomplete="off">
                 <button class="search-top-btn" id="searchBtn">Search</button>
             </div>
             <div class="search-top-right">
@@ -338,17 +281,20 @@
                 <table class="pt-full-table">
                     <thead>
                         <tr>
+                            <th>CODE</th>
                             <th>SUB DATE</th>
                             <th>COMPANY NAME</th>
                             <th>FE ID</th>
                             <th>PWD</th>
                             <th>COUNTRY</th>
+                            <th>EMAIL ID</th>
+                            <th>EMAIL PWD</th>
                             <th>NEW PWD</th>
                         </tr>
                     </thead>
                     <tbody id="resultsBody">
                         <tr>
-                            <td colspan="6">
+                            <td colspan="9">
                                 <div class="empty-state">
                                     <div class="icon">🔍</div>
                                     <h3>Loading Records</h3>
@@ -359,30 +305,6 @@
                     </tbody>
                 </table>
             </div>
-        </div>
-    </div>
-
-    <!-- Authorized People Admin Modal -->
-    <div class="modal-overlay" id="accessModal">
-        <div class="modal-card">
-            <div class="modal-header">
-                <h3 style="font-size: 1.1rem; font-weight: 700;">Authorized People Access</h3>
-                <button class="modal-close" id="closeAccessModalBtn">&times;</button>
-            </div>
-            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
-                People listed below are authorized to request OTP and access the PT List database.
-            </p>
-
-            <div id="accessMsg" style="margin-bottom: 10px; font-size: 0.85rem; display: none;"></div>
-
-            <div id="allowedEmailsList" style="max-height: 240px; overflow-y: auto;">
-                <div style="text-align: center; color: var(--text-muted); padding: 16px;">Loading...</div>
-            </div>
-
-            <form id="addEmailForm" class="add-email-form">
-                <input type="email" id="newEmailInput" class="add-email-input" placeholder="New Person Email ID" required>
-                <button type="submit" class="btn-add-email">Add Person</button>
-            </form>
         </div>
     </div>
 
@@ -424,7 +346,7 @@
                 try {
                     const res = await fetch(`/ptlist/api/search?q=${encodeURIComponent(query)}`);
                     if (res.status === 401 || res.status === 403) {
-                        window.location.href = '/ptlist';
+                        window.location.href = '/';
                         return;
                     }
                     const data = await res.json();
@@ -433,7 +355,7 @@
                     console.error('Fetch error:', err);
                     resultsBody.innerHTML = `
                         <tr>
-                            <td colspan="6">
+                            <td colspan="9">
                                 <div class="empty-state">
                                     <div class="icon">⚠️</div>
                                     <h3>Error Loading Records</h3>
@@ -451,11 +373,11 @@
                 if (records.length === 0) {
                     resultsBody.innerHTML = `
                         <tr>
-                            <td colspan="6">
+                            <td colspan="9">
                                 <div class="empty-state">
                                     <div class="icon">🔍</div>
                                     <h3>No Matching Records Found</h3>
-                                    <p>Try searching for a different company or FE ID</p>
+                                    <p>Try searching for a different company, FE ID, or Code</p>
                                 </div>
                             </td>
                         </tr>
@@ -464,20 +386,26 @@
                 }
 
                 resultsBody.innerHTML = records.map(r => {
+                    const code = r.code ? `<span class="tag-code-val">${escapeHtml(r.code)}</span>` : '<span style="color: var(--text-muted);">—</span>';
                     const subDate = escapeHtml(r.sub_date || '—');
                     const companyName = escapeHtml(r.company_name || '—');
                     const feId = r.fe_id ? `<span class="tag-fe-val">${escapeHtml(r.fe_id)}</span>` : '<span style="color: var(--text-muted);">—</span>';
                     const pwd = r.pwd ? `<span class="tag-pwd-val">${escapeHtml(r.pwd)}</span>` : '<span style="color: var(--text-muted);">—</span>';
                     const country = r.country ? `<span class="tag-country-val">${escapeHtml(r.country)}</span>` : '<span style="color: var(--text-muted);">—</span>';
+                    const emailId = r.email_id ? `<span class="tag-email-val">${escapeHtml(r.email_id)}</span>` : '<span style="color: var(--text-muted);">—</span>';
+                    const emailPwd = r.email_pwd ? `<span class="tag-emailpwd-val">${escapeHtml(r.email_pwd)}</span>` : '<span style="color: var(--text-muted);">—</span>';
                     const newPwd = r.new_pwd ? `<span class="tag-newpwd-val">${escapeHtml(r.new_pwd)}</span>` : '<span style="color: var(--text-muted);">—</span>';
 
                     return `
                         <tr>
+                            <td>${code}</td>
                             <td style="font-family: monospace;">${subDate}</td>
                             <td style="font-weight: 700; color: var(--text-primary);">${companyName}</td>
                             <td>${feId}</td>
                             <td>${pwd}</td>
                             <td>${country}</td>
+                            <td>${emailId}</td>
+                            <td>${emailPwd}</td>
                             <td>${newPwd}</td>
                         </tr>
                     `;

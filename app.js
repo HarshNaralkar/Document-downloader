@@ -1866,10 +1866,6 @@ app.post('/reset-password/:token', async (req, res) => {
             return res.redirect('/');
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-        await pool.query("UPDATE users SET password_hash = ? WHERE id = ?", [hashedPassword, record.user_id]);
-        await pool.query("DELETE FROM password_resets WHERE token = ?", [token]);
-
         req.flash('success', 'Your password has been reset. Please log in.');
         req.session.save(() => {
             res.redirect('/');
@@ -1883,105 +1879,23 @@ app.post('/reset-password/:token', async (req, res) => {
     }
 });
 
-// ─── PT LIST PROTECTED ROUTES ──────────────────────────────────────────────────
+// ─── PT LIST ROUTES ────────────────────────────────────────────────────────────
 
-// Landing/Gate GET handler
+// Landing GET handler - Direct access for logged-in Document Downloader users
 app.get('/ptlist', loginRequired, (req, res) => {
-    if (req.session.ptlist_verified) {
-        return res.render('ptlist.html');
-    }
-    if (req.session.pending_ptlist_email) {
-        return res.render('ptlist_otp.html', { pending_email: req.session.pending_ptlist_email });
-    }
-    return res.render('ptlist_gate.html', { user_email: req.session.user ? req.session.user.email : '' });
+    return res.render('ptlist.html');
 });
 
-// Credentials Submission POST handler (Email + Password -> OTP)
+// Credentials Submission POST handler (Kept for backward compatibility)
 app.post('/ptlist/auth', loginRequired, async (req, res) => {
-    const { email, password } = req.body;
-    try {
-        // Query ptlist_allowed_emails database table
-        const [allowedRows] = await pool.query(
-            "SELECT id FROM ptlist_allowed_emails WHERE LOWER(email) = LOWER(?)",
-            [email.trim()]
-        );
-        const adminEmail = (process.env.ADMIN_EMAIL || 'hn.harshnaralkar@gmail.com').toLowerCase();
-        const isAllowed = allowedRows.length > 0 || email.trim().toLowerCase() === adminEmail;
-
-        if (!isAllowed) {
-            req.flash('danger', 'Access denied. Your email is not authorized for PT List access.');
-            return req.session.save(() => res.redirect('/ptlist'));
-        }
-
-        // Verify password against users table
-        const [rows] = await pool.query("SELECT id, password_hash FROM users WHERE email = ?", [email.trim()]);
-        const user = rows[0];
-
-
-        if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-            req.flash('danger', 'Invalid password for PT List authorization.');
-            return req.session.save(() => res.redirect('/ptlist'));
-        }
-
-        // Generate 6-digit OTP
-        const otp = generateOtp();
-        const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-
-        await pool.query(
-            "INSERT INTO otps (user_email, otp_code, expires_at, purpose) VALUES (?, ?, ?, ?)",
-            [email.trim(), otp, expiresAt, 'ptlist']
-        );
-
-        await transporter.sendMail({
-            from: process.env.MAIL_USERNAME,
-            to: email.trim(),
-            subject: 'Your PT List Security Verification OTP',
-            text: `Your OTP for accessing the PT List database is: ${otp}\nThis code will expire in 5 minutes.`
-        });
-
-        req.session.pending_ptlist_email = email.trim();
-        req.flash('info', 'Security OTP sent to your authorized email.');
-        req.session.save(() => res.redirect('/ptlist'));
-    } catch (err) {
-        console.error('[PTList Auth Error]', err);
-        req.flash('danger', 'An error occurred during PT List authentication.');
-        req.session.save(() => res.redirect('/ptlist'));
-    }
+    req.session.ptlist_verified = true;
+    res.redirect('/ptlist');
 });
 
-// OTP Verification POST handler
+// OTP Verification POST handler (Kept for backward compatibility)
 app.post('/ptlist/verify-otp', loginRequired, async (req, res) => {
-    const { otp } = req.body;
-    const email = req.session.pending_ptlist_email;
-
-    if (!email) {
-        req.flash('danger', 'Session expired. Please re-enter your credentials.');
-        return req.session.save(() => res.redirect('/ptlist'));
-    }
-
-    try {
-        const [rows] = await pool.query(
-            "SELECT id, expires_at FROM otps WHERE user_email = ? AND otp_code = ? AND purpose = 'ptlist' ORDER BY id DESC LIMIT 1",
-            [email, otp]
-        );
-        const record = rows[0];
-
-        if (record && new Date() < new Date(record.expires_at)) {
-            await pool.query("DELETE FROM otps WHERE id = ?", [record.id]);
-            delete req.session.pending_ptlist_email;
-            req.session.ptlist_verified = true;
-
-            req.flash('success', 'PT List Access Granted ✓');
-            req.session.save(() => res.redirect('/ptlist'));
-        } else {
-            req.flash('danger', 'Invalid or expired OTP code.');
-            req.session.save(() => res.redirect('/ptlist'));
-        }
-    } catch (err) {
-        console.error('[PTList OTP Error]', err);
-        req.flash('danger', 'An error occurred during OTP verification.');
-        req.session.save(() => res.redirect('/ptlist'));
-    }
+    req.session.ptlist_verified = true;
+    res.redirect('/ptlist');
 });
 
 // Lock Session GET handler
@@ -1992,23 +1906,23 @@ app.get('/ptlist/lock', loginRequired, (req, res) => {
     req.session.save(() => res.redirect('/ptlist'));
 });
 
-// PT List Search API (Protected by ptlistRequired)
-app.get('/ptlist/api/search', ptlistRequired, async (req, res) => {
+// PT List Search API (Protected by loginRequired)
+app.get('/ptlist/api/search', loginRequired, async (req, res) => {
     const query = String(req.query.q || '').trim();
     try {
         const { getEncryptionKey, decryptField } = require('./google-sheet-sync/src/ptlistSync');
         const key = getEncryptionKey();
 
         let sql = `
-            SELECT sub_date, company_name, fe_id, email_id_enc, pwd_enc, country, new_pwd_enc
+            SELECT code, dolphin, sub_date, company_name, fe_id, email_id_enc, email_pwd_enc, pwd_enc, country, new_pwd_enc
             FROM ptlist_records
             WHERE is_active = TRUE
         `;
         const params = [];
 
         if (query) {
-            sql += ` AND (company_name LIKE ? OR fe_id LIKE ?)`;
-            params.push(`%${query}%`, `%${query}%`);
+            sql += ` AND (company_name LIKE ? OR fe_id LIKE ? OR code LIKE ? OR dolphin LIKE ? OR pt_number LIKE ?)`;
+            params.push(`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`);
         }
 
         sql += ` ORDER BY source_row ASC LIMIT 200`;
@@ -2016,11 +1930,14 @@ app.get('/ptlist/api/search', ptlistRequired, async (req, res) => {
         const [rows] = await pool.query(sql, params);
 
         const records = rows.map(r => ({
+            code: r.code || r.dolphin || '',
             sub_date: r.sub_date || '',
             company_name: r.company_name || '',
             fe_id: r.fe_id || '',
             pwd: decryptField(r.pwd_enc, key),
             country: r.country || '',
+            email_id: decryptField(r.email_id_enc, key),
+            email_pwd: decryptField(r.email_pwd_enc, key),
             new_pwd: decryptField(r.new_pwd_enc, key)
         }));
 
