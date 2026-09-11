@@ -147,7 +147,7 @@ function createSearchRouter({ pool, config } = {}) {
         try {
             const query = (req.query.name || '').trim();
             if (!query) {
-                return res.status(400).json({ success: false, message: 'sponsor name is required' });
+                return res.status(400).json({ success: false, message: 'sponsor name or CR number is required' });
             }
 
             const tabFilter = (req.query.tab || '').trim();
@@ -173,16 +173,18 @@ function createSearchRouter({ pool, config } = {}) {
 
             for (const row of rows) {
                 const name = (row.sponsor_name || '').trim();
+                const crNumber = (row.cr_number || '').trim();
                 const nameLower = name.toLowerCase();
+                const crNumberLower = crNumber.toLowerCase();
 
-                if (!nameLower) continue;
+                if (!nameLower && !crNumberLower) continue;
 
-                // 1. Perfect Match: Substring check
-                if (nameLower.includes(queryLower)) {
+                // 1. Perfect Match: Substring check for sponsor name or CR number
+                if (nameLower.includes(queryLower) || crNumberLower.includes(queryLower)) {
                     perfectMatches.push(row);
                 } 
-                // 2. Close Match: Token similarity check
-                else if (checkTokenSimilarity(query, name) >= 0.66) {
+                // 2. Close Match: Token similarity check for sponsor names
+                else if (nameLower && checkTokenSimilarity(query, name) >= 0.66) {
                     closeMatches.push(row);
                 }
             }
