@@ -373,7 +373,7 @@ const REQUIRED_FIELDS = {
     'request_letter': ['SPNAME', 'SPADD', 'CRNONDIDNO', 'PHONENO', 'VISAISSUEDATE'],
     'agreement':      ['SPNAME', 'SPADD', 'VISAISSUEDATE', 'PASSPORTNAME', 'PASSPORTNO' , 'JOBROLE', 'SALARY'],
     'afi_noc':        ['PASSPORTNAME', 'PASSPORTNO', 'SPNAME' , 'VISANO', 'VISAEXPIRY' , 'FEID' , 'Country Name'],
-    'Annexure':       ['SPNAME' , 'Country Name','LEGAL_STATUS','AUTHORISED_SIGNATORY','ID_NO'],
+    'Annexure':       ['SPNAME' , 'Country Name'],
     'POA_DM':         ['SPNAME', 'SPADD', 'VISAISSUEDATE', 'JOBROLE', 'SALARY']
 };
 
